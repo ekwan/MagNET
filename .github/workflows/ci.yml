@@ -38,6 +38,7 @@ jobs:
         run: |
           pip install torch==2.5.0 --index-url https://download.pytorch.org/whl/cpu
           pip install -r magnet/requirements.txt
-          pip install --no-deps ./magnet "pytest>=7"
+          pip install --no-deps ./magnet
+          pip install "pytest>=7"
       - name: Run the magnet package tests
         run: pytest magnet/ -q
