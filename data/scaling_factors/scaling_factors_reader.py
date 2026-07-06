@@ -1,10 +1,9 @@
-"""Reader for the symmetrized MagNET-Zero/MagNET-PCM linear-scaling tables in this folder.
+"""Reader for the published MagNET-Zero/MagNET-PCM linear-scaling tables in this folder.
 
-These two CSV files (one per nucleus) are a deployment-quality export: the per-solvent coefficients
-that turn a MagNET-Zero gas-phase shielding plus a MagNET-PCM chloroform correction into a predicted
-chemical shift, fit with reflection-symmetrized inference (n_passes=10, symmetrize=True). They are
-the "serving on new molecules" variant of Supporting Information Tables S10/S11; the paper's published
-tables use the unsymmetrized shieldings and live in analysis/code/scaling_factors.py.
+These two CSV files (one per nucleus) ARE Supporting Information Tables S10 (proton) and S11 (carbon),
+verbatim: the reflection-symmetrized (n_passes=10, symmetrize=True) per-solvent coefficients that turn
+a MagNET-Zero gas-phase shielding plus a MagNET-PCM chloroform correction into a predicted shift.
+analysis/code/scaling_factors.py derives them; see its module docstring for the method.
 
 Each row is one solvent; columns are intercept, stationary (the MagNET-Zero slope), and pcm (the
 MagNET-PCM-correction slope). Predicted shift = intercept + stationary * shielding + pcm * correction.

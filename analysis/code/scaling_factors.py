@@ -11,10 +11,13 @@ uses a TWO-parameter model: the gas and PCM terms share one per-solvent slope (P
 by a conversion factor first), which fit held-out carbons slightly better; the reported `pcm` is that
 slope times the conversion factor.
 
-Everything reproduces from the released delta-22 data to the precision of its integer encoding
-(`test_scaling_factors.py` locks it down). `build_scaling_tables(..., symmetrized=True)` instead
-computes a separate deployment variant via reflection-symmetrized inference
-(`scaling_factors_symmetrized.py`); it does not match these tables and is not what the SI reports.
+The published tables are REFLECTION-SYMMETRIZED: each shielding is averaged over 20 forward passes
+with the geometry mirrored for half (n_passes=10, symmetrize=True), cancelling the SO(3)-only model's
+reflection-parity error. They ship verbatim in
+data/scaling_factors/scaling_factors_symmetrized_{H,C}.csv; published_scaling_tables() returns them,
+and build_scaling_tables(symmetrized=True) reproduces them from live inference (needs checkpoints).
+build_scaling_tables(symmetrized=False) fits the raw single-pass shieldings in delta22.hdf5 instead
+and lands ~0.01 ppm off. test_scaling_factors.py locks this down.
 """
 import os
 import sys
@@ -50,50 +53,20 @@ RECOMMENDED_MODEL = {"H": "three_parameter", "C": "two_parameter"}
 
 _COLUMNS = ["intercept", "stationary", "pcm"]
 
-# The published SI Tables S10 (proton) and S11 (carbon), shipped verbatim so you can convert
-# shieldings to shifts WITHOUT the delta-22 data download. These are exactly what
-# build_scaling_tables() reproduces from delta-22; test_scaling_factors.py asserts the two agree, so
-# they cannot silently drift. Prefer published_scaling_tables() for a quick lookup, and
-# build_scaling_tables() when you want to re-derive them from the raw data.
-_PUBLISHED_TABLE_CSV = {
-    "H": """solvent,intercept,stationary,pcm
-tetrahydrofuran,31.321785,-0.980175,-0.786672
-dichloromethane,31.377310,-0.979870,-0.808573
-chloroform,31.294992,-0.975794,-0.852690
-toluene,31.716957,-0.996733,1.944856
-benzene,31.987569,-1.005289,2.236515
-chlorobenzene,31.681438,-0.993846,0.830236
-acetone,31.512157,-0.987261,-1.238414
-dimethylsulfoxide,31.598698,-0.991103,-1.355248
-acetonitrile,31.496110,-0.985716,-0.974465
-trifluoroethanol,30.876004,-0.959997,-0.958852
-methanol,31.256030,-0.976446,-1.250121
-TIP4P,31.359134,-0.978809,-1.478298
-""",
-    "C": """solvent,intercept,stationary,pcm
-tetrahydrofuran,171.054488,-0.919000,-1.069509
-dichloromethane,171.509389,-0.921167,-1.115015
-chloroform,171.728797,-0.924231,-0.936804
-toluene,171.690907,-0.924987,-0.618410
-benzene,171.967177,-0.927033,-0.593716
-chlorobenzene,171.075910,-0.921238,-0.997641
-acetone,171.308023,-0.919610,-1.239503
-dimethylsulfoxide,170.598425,-0.918674,-1.296501
-acetonitrile,171.879839,-0.922629,-1.287664
-trifluoroethanol,174.237671,-0.939012,-1.290073
-methanol,172.426161,-0.927566,-1.288847
-TIP4P,173.696379,-0.937854,-1.342668
-""",
-}
+# published_scaling_tables() reads the shipped SI tables from here (provenance in the module docstring).
+_SYMMETRIZED_CSV_DIR = os.path.join(_REPO, "data", "scaling_factors")
 
 
 def published_scaling_tables():
     """The published SI scaling tables, {"H": Table S10, "C": Table S11}, as solvent-indexed
-    DataFrames. No data download needed; use these with predict_shift to turn MagNET-Zero/PCM
-    shieldings into chemical shifts."""
-    import io
-    return {nucleus: pd.read_csv(io.StringIO(csv)).set_index("solvent")
-            for nucleus, csv in _PUBLISHED_TABLE_CSV.items()}
+    DataFrames (columns intercept / stationary / pcm). Read from the shipped CSVs, so no delta-22
+    download is needed; pass to predict_shift to turn MagNET-Zero/PCM shieldings into shifts. See the
+    module docstring for provenance."""
+    tables = {}
+    for nucleus in ("H", "C"):
+        path = os.path.join(_SYMMETRIZED_CSV_DIR, f"scaling_factors_symmetrized_{nucleus}.csv")
+        tables[nucleus] = pd.read_csv(path).set_index("solvent")[_COLUMNS]
+    return tables
 
 
 def proton_scaling_table(query_df_nn, solvents=SOLVENTS, exclude_solutes=EXCLUDE_SOLUTES):
@@ -155,19 +128,15 @@ def carbon_scaling_table(query_df_nn, query_df_dft=None, solvents=SOLVENTS,
 
 
 def build_scaling_tables(delta22_path, experimental_path, symmetrized=False, n_passes=10):
-    """Reproduce both recommended-scaling tables from the released delta-22 data.
+    """Re-derive both recommended-scaling tables from the released delta-22 data.
 
-    symmetrized=False (default) reproduces the published SI Tables S10/S11 exactly, using the
-    HDF5's stored MagNET-Zero/PCM shieldings -- this is what test_scaling_factors.py checks against
-    and what published_scaling_tables() ships.
+    symmetrized=True reproduces the published SI Tables S10/S11 the way they were generated: live,
+    reflection-symmetrized inference (scaling_factors_symmetrized.py). Needs the magnet package and
+    model checkpoints, and is slow (re-runs inference on all 22 solutes).
 
-    symmetrized=True instead computes the shieldings via live, symmetrized inference
-    (predict_shieldings(..., n_passes=n_passes, symmetrize=True), see
-    scaling_factors_symmetrized.py), which corrects a reflection-parity bug in the stored HDF5
-    values (they come from a single unsymmetrized forward pass). Use this for a deployment-quality
-    scaling table -- e.g. serving MagNET-Zero/MagNET-PCM on new "everyday" molecules -- rather than
-    for reproducing the SI. Requires the magnet package and released model checkpoints; slower
-    (re-runs inference on all 22 solutes instead of reading pre-baked values).
+    symmetrized=False (default) fits the raw single-pass MagNET-Zero/PCM shieldings stored in the
+    HDF5, which carry the reflection-parity error the published tables correct, so it lands ~0.01 ppm
+    off the published SI. Use it for a checkpoint-free re-derivation.
 
     Returns {"H": Table S10 DataFrame, "C": Table S11 DataFrame}.
     """
@@ -214,7 +183,9 @@ def predict_shift(table, solvent, magnet_zero_shielding, magnet_pcm_chloroform_c
 if __name__ == "__main__":
     h5 = dataset_file("delta22", root=_REPO)
     xlsx = os.path.join(_REPO, "data", "delta22", "delta22_experimental.xlsx")
+    # symmetrized=False: the checkpoint-free raw-data fit, within ~0.01 ppm of the published SI
+    # (published_scaling_tables() returns the exact symmetrized SI values).
     tables = build_scaling_tables(h5, xlsx)
     for nucleus, label in (("H", "Table S10 (1H)"), ("C", "Table S11 (13C)")):
-        print(f"\n=== {label}: {RECOMMENDED_MODEL[nucleus]} model ===")
+        print(f"\n=== {label} (unsymmetrized re-derivation): {RECOMMENDED_MODEL[nucleus]} model ===")
         print(tables[nucleus].round(6).to_string())

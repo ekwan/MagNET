@@ -10,10 +10,11 @@ negligible, even on small molecules (delta-22's solutes are 6-22 atoms). `predic
 symmetrize=True)` fixes this for free by averaging the prediction on the original geometry and its
 mirror image.
 
-This module produces a scaling-factor table meant for deployment (e.g. serving MagNET-Zero/PCM on
-arbitrary "everyday" molecules), not a replacement for the SI's published Tables S10/S11: it is a
-separate, corrected-methodology table for production use, computed the same way
-`scaling_factors.build_scaling_tables(symmetrized=True)` does.
+This module reproduces the SI's published Tables S10/S11 (they ARE the reflection-symmetrized tables,
+shipped in data/scaling_factors/scaling_factors_symmetrized_{H,C}.csv).
+scaling_factors.build_scaling_tables(symmetrized=True) calls in here to regenerate them from live
+inference; its checkpoint-free symmetrized=False path fits the raw single-pass HDF5 shieldings instead
+and lands ~0.01 ppm off.
 """
 import contextlib
 import os

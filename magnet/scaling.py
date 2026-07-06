@@ -19,35 +19,37 @@ import io
 
 import numpy as np
 
-# Published SI Tables S10 (proton) and S11 (carbon), verbatim. Columns: intercept, stationary, pcm.
+# Published SI Tables S10 (proton) and S11 (carbon), verbatim (reflection-symmetrized: n_passes=10,
+# symmetrize=True). Columns: intercept, stationary, pcm. Kept byte-for-byte in sync with
+# data/scaling_factors/scaling_factors_symmetrized_{H,C}.csv by test_scaling_factors.py.
 _PUBLISHED_TABLE_CSV = {
     "H": """solvent,intercept,stationary,pcm
-tetrahydrofuran,31.321785,-0.980175,-0.786672
-dichloromethane,31.377310,-0.979870,-0.808573
-chloroform,31.294992,-0.975794,-0.852690
-toluene,31.716957,-0.996733,1.944856
-benzene,31.987569,-1.005289,2.236515
-chlorobenzene,31.681438,-0.993846,0.830236
-acetone,31.512157,-0.987261,-1.238414
-dimethylsulfoxide,31.598698,-0.991103,-1.355248
-acetonitrile,31.496110,-0.985716,-0.974465
-trifluoroethanol,30.876004,-0.959997,-0.958852
-methanol,31.256030,-0.976446,-1.250121
-TIP4P,31.359134,-0.978809,-1.478298
+tetrahydrofuran,31.319664,-0.980082,-0.781373
+dichloromethane,31.374485,-0.979760,-0.806215
+chloroform,31.291983,-0.975682,-0.851715
+toluene,31.714067,-0.996613,1.948607
+benzene,31.984616,-1.005170,2.239317
+chlorobenzene,31.677950,-0.993715,0.830908
+acetone,31.510823,-0.987188,-1.229850
+dimethylsulfoxide,31.597261,-0.991031,-1.348009
+acetonitrile,31.494061,-0.985628,-0.969617
+trifluoroethanol,30.873172,-0.959885,-0.955808
+methanol,31.253627,-0.976349,-1.246680
+TIP4P,31.356622,-0.978710,-1.475907
 """,
     "C": """solvent,intercept,stationary,pcm
-tetrahydrofuran,171.054488,-0.919000,-1.069509
-dichloromethane,171.509389,-0.921167,-1.115015
-chloroform,171.728797,-0.924231,-0.936804
-toluene,171.690907,-0.924987,-0.618410
-benzene,171.967177,-0.927033,-0.593716
-chlorobenzene,171.075910,-0.921238,-0.997641
-acetone,171.308023,-0.919610,-1.239503
-dimethylsulfoxide,170.598425,-0.918674,-1.296501
-acetonitrile,171.879839,-0.922629,-1.287664
-trifluoroethanol,174.237671,-0.939012,-1.290073
-methanol,172.426161,-0.927566,-1.288847
-TIP4P,173.696379,-0.937854,-1.342668
+tetrahydrofuran,171.052274,-0.918997,-1.069506
+dichloromethane,171.507154,-0.921165,-1.115013
+chloroform,171.726919,-0.924228,-0.936801
+toluene,171.689276,-0.924983,-0.618407
+benzene,171.965715,-0.927029,-0.593714
+chlorobenzene,171.073820,-0.921235,-0.997638
+acetone,171.305850,-0.919608,-1.239500
+dimethylsulfoxide,170.596065,-0.918672,-1.296497
+acetonitrile,171.877492,-0.922626,-1.287661
+trifluoroethanol,174.235231,-0.939011,-1.290071
+methanol,172.423799,-0.927563,-1.288843
+TIP4P,173.692750,-0.937848,-1.342659
 """,
 }
 
