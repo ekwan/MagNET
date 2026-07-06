@@ -29,7 +29,7 @@ Two independent NMR shielding datasets, analyzed separately (never pooled):
 | Dataset | Source | Methods | Nuclei | Reference |
 |---|---|---|---|---|
 | **NS372** | Schattenberg & Kaupp, *JCTC* **17**, 7602 (2021) | 44 DFT/WFT functionals | ¹H ¹¹B ¹³C ¹⁵N ¹⁷O ¹⁹F ³¹P ³³S | CCSD(T)/pcSseg-3 |
-| **delta22** | in-house `delta22.hdf5` | 18 gas-phase functionals, largest basis (pcSseg-3; mp2 → pcSseg-2), PBE0/cc-pVTZ geometry | ¹H ¹³C | DSD-PBEP86 (highest-rung in-set method, stands in for CCSD(T)) |
+| **delta22** | in-house delta-22 set | 18 gas-phase functionals, largest basis (pcSseg-3; mp2 → pcSseg-2), PBE0/cc-pVTZ geometry | ¹H ¹³C | DSD-PBEP86 (highest-rung in-set method, stands in for CCSD(T)) |
 """
 
 _CONFIG_MD = "## 1. Configuration"
@@ -69,8 +69,11 @@ def figure_path(name):
     return os.path.join("figures", name)
 
 # self-clean: this notebook builds PNG names dynamically (one per nucleus), so drop any
-# previously written figures before regenerating (glob on a missing folder returns [])
-for _stale in glob.glob(os.path.join("figures", "*.png")):
+# previously written figures before regenerating. Scope the delete to THIS figure's own prefix:
+# the figures/ folder is shared with the other notebooks in this directory, and a full reproduce
+# run executes them in name order, so a broad "figures/*.png" wipe would destroy the panels written
+# by notebooks that sort before this one. (glob on a missing folder returns [])
+for _stale in glob.glob(os.path.join("figures", "si_figure_s03_*.png")):
     os.remove(_stale)
 
 pd.set_option('display.width', 150)
@@ -120,14 +123,14 @@ _NS372_DEF_MD = r"""
 
 Conventional GIAO shieldings for 44 functionals across 8 main-group nuclei, with a
 CCSD(T)/pcSseg-3 reference. Kaupp Reduced-Set exclusions (F₃⁻, O₃, BH - multireference
-outliers) are applied. Input: `ct1c00919_si_002.xlsx`.
+outliers) are applied. Input: the Kaupp NS372 supporting-information spreadsheet.
 """
 
 _DELTA22_DEF_MD = r"""
 ## 3. delta22 - definitions
 
-Gas-phase conventional GIAO shieldings from `delta22.hdf5`: 18 functionals at their
-largest available basis (pcSseg-3; plain `mp2` only to pcSseg-2), at the PBE0/cc-pVTZ
+Gas-phase conventional GIAO shieldings from the delta-22 set: 18 functionals at their
+largest available basis (pcSseg-3; plain MP2 only to pcSseg-2), at the PBE0/cc-pVTZ
 geometry. Observations are pooled ¹H / ¹³C atom sites across all 22 solutes. There is no
 CCSD(T) reference in the file; **DSD-PBEP86 is used as the reference** for delta22 - it
 is the highest-rung double-hybrid available in this method set and stands in for CCSD(T)
@@ -138,7 +141,7 @@ _LOAD_MD = r"""
 ## 4. Load datasets + global colour scale
 
 Run the loaders, analyse every nucleus, and compute the figure-wide
-`-log10(1-|r|)` maximum (`GLOBAL_VMAX`) used as the colour scale on every correlation matrix
+-log10(1-|r|) maximum used as the colour scale on every correlation matrix
 below, for NS372 and delta22 alike.
 """
 
@@ -190,8 +193,9 @@ sum_ns372.round(5)
     md(r"""
 ### 5.2  Per-method scaled RMSE vs CCSD(T)
 
-`scaled_rmse` = RMSE of residuals after a per-method linear fit
-`sigma_method ~ a*sigma_CCSD(T) + b` - the error that survives empirical linear scaling.
+Scaled RMSE = RMSE of residuals after a per-method linear fit of each method's shieldings
+against the CCSD(T) reference (slope and intercept) - the error that survives empirical
+linear scaling.
 """),
     code(r"""
 rmse_ns372 = pd.DataFrame({nuc: res_ns372[nuc]['scaled_rmse'] for nuc in res_ns372})

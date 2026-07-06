@@ -14,8 +14,11 @@ import pytest
 
 warnings.filterwarnings("ignore")
 
+import torch
+
 import magnet.api as api
 from magnet import scaling
+from magnet.eqV2.edge_rot_mat import init_edge_rot_mat
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.dirname(_HERE)                       # magnet/ -> repo root
@@ -461,3 +464,22 @@ def test_real_atoms_beyond_cutoff_crash():
     # two atoms 50 A apart: no edges within cutoff -> same zero-edge crash as one atom.
     api.predict_shieldings(np.array([6, 1]), np.array([[0., 0., 0.], [0., 0., 50.]]),
                            n_passes=1, symmetrize=False)
+
+
+# ---- degenerate-geometry guard in the local-frame construction (no weights needed) ----
+def test_edge_rot_mat_rejects_coincident_atoms():
+    # an edge between two atoms at the same position has ~zero length; the old code printed a
+    # warning and then divided by ~zero, silently producing NaN frames that poison the whole
+    # forward pass. It must raise instead.
+    edge_vecs = torch.tensor([[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+    with pytest.raises(ValueError, match="overlapping atoms"):
+        init_edge_rot_mat(edge_vecs)
+
+
+def test_edge_rot_mat_accepts_separated_atoms():
+    edge_vecs = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.5, 0.0], [0.0, 0.0, 2.0]])
+    rot = init_edge_rot_mat(edge_vecs)
+    assert rot.shape == (3, 3, 3)
+    # each frame is a proper rotation: R @ R^T == I
+    identity = torch.eye(3).expand(3, 3, 3)
+    assert torch.allclose(torch.bmm(rot, rot.transpose(1, 2)), identity, atol=1e-4)

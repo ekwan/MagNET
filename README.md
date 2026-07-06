@@ -26,10 +26,10 @@ MagNET is a family of neural networks for predicting NMR chemical shifts. This r
 
 | Model | Description | Details |
 |---|---|---|
-| **MagNET** | foundation model | - for near-equilibrium geometries <br /> - trained on PBE0/pcSseg-1/gas shieldings |
-| **MagNET-Zero** | high-quality gas-phase solute shieldings | - use AIMNet2-optimized geometries <br /> - WP04/pcSseg-2 (<sup>1</sup>H shieldings) <br /> - ωB97X-D/pcSseg-2 (<sup>13</sup>C shieldings) |
-| **MagNET-PCM** | implicit solvent corrections | - shielding(PCM) - shielding(gas) <br />- use AIMNet2-optimized geometries <br /> - computed at B3LYP/pcSseg-2/chloroform |
-| **MagNET-x** | explicit solvent corrections | - shielding(solute+solvent) - shielding(solute) <br /> - supports chloroform, benzene, methanol, and water <br /> - use classical MD geometries <br /> - trained at PBE0/pcSseg-1 |
+| **MagNET** | foundation model | <ul><li>for near-equilibrium geometries</li><li>trained on PBE0/pcSseg-1/gas shieldings</li></ul> |
+| **MagNET-Zero** | high-quality gas-phase solute shieldings | <ul><li>use AIMNet2-optimized geometries</li><li>WP04/pcSseg-2 (<sup>1</sup>H shieldings)</li><li>ωB97X-D/pcSseg-2 (<sup>13</sup>C shieldings)</li></ul> |
+| **MagNET-PCM** | implicit solvent corrections | <ul><li>shielding(PCM) - shielding(gas)</li><li>use AIMNet2-optimized geometries</li><li>computed at B3LYP-D3(BJ)/pcSseg-2/chloroform</li></ul> |
+| **MagNET-x** | explicit solvent corrections | <ul><li>shielding(solute+solvent) - shielding(solute)</li><li>supports chloroform, benzene, methanol, and water</li><li>use classical MD geometries</li><li>trained at PBE0/pcSseg-1</li></ul> |
 
 All models use Equiformer-V2 and have approximately 10M weights. Separate weights are given for <sup>1</sup>H and <sup>13</sup>C prediction. Input structures can contain H, C, N, O, F, Cl, and S (inference should not be performed on structures with unsupported elements).
 
@@ -37,11 +37,11 @@ All models use Equiformer-V2 and have approximately 10M weights. Separate weight
 
 | Dataset | Details |
 |---|---|
-| **_sigma_-shake** | - 4.4M solutes from GDB-13/17 with functional group augmentation <br /> - stationary and quasiclassically perturbed structures at B3LYP-D3(BJ)/6-31G\* <br /> - PBE0/pcSseg-1/gas shieldings |
-| **_sigma_-fresh** | - 10K representative natural product, drug-like, sugar, and peptide solutes dissolved in benzene, chloroform, methanol, and water <br /> - ~10 computed poses/solute with many more solvated geometries available <br /> - 462K poses have computed PBE0/pcSseg-1 shieldings |
-| **_sigma_-pepper** (part 1) | - GDB molecules with ≤ 10 heavy atoms <br /> - AIMNet2 stationary structures <br /> - PBE0/pcSseg-1 shieldings |
-| **_sigma_-pepper** (part 2) | - GDB molecules with ≤ 9 heavy atoms <br /> - AIMNet2 stationary structures <br /> - WP04/pcSseg-2/gas (<sup>1</sup>H shieldings) <br /> - ωB97X-D/pcSseg-2/gas (<sup>13</sup>C shieldings) |
-| **_sigma_-concentrate** | - 50K random structures from *sigma*-shake <br /> - PCM(chloroform) corrections at B3LYP/pcSseg-2 |
+| **_sigma_-shake** | <ul><li>4.4M solutes from GDB-13/17 with functional group augmentation</li><li>stationary and quasiclassically perturbed structures at B3LYP-D3(BJ)/6-31G\*</li><li>PBE0/pcSseg-1/gas shieldings</li></ul> |
+| **_sigma_-fresh** | <ul><li>10K representative natural product, drug-like, sugar, and peptide solutes dissolved in benzene, chloroform, methanol, and water</li><li>~10 computed poses/solute with many more solvated geometries available</li><li>462K poses have computed PBE0/pcSseg-1 shieldings</li></ul> |
+| **_sigma_-pepper** (part 1) | <ul><li>GDB molecules with ≤ 10 heavy atoms</li><li>AIMNet2 stationary structures</li><li>PBE0/pcSseg-1 shieldings</li></ul> |
+| **_sigma_-pepper** (part 2) | <ul><li>GDB molecules with ≤ 9 heavy atoms</li><li>AIMNet2 stationary structures</li><li>WP04/pcSseg-2/gas (<sup>1</sup>H shieldings)</li><li>ωB97X-D/pcSseg-2/gas (<sup>13</sup>C shieldings)</li></ul> |
+| **_sigma_-concentrate** | <ul><li>50K random structures from *sigma*-shake</li><li>PCM(chloroform) corrections at B3LYP/pcSseg-2</li></ul> |
 
 ### Installing MagNET
 
@@ -128,8 +128,7 @@ for name, indices in sites.items():
     print(f"{name:<13} {shifts[indices].mean():6.2f} ppm")
 ```
 
-The predictions land on the measured shifts (experiment is acetone in chloroform, from the delta22
-dataset):
+The predictions are close to experiment:
 
 | site | MagNET | experiment (CDCl<sub>3</sub>) |
 |---|---|---|
@@ -140,7 +139,7 @@ dataset):
 **Notes:**
 
 - **Passes and symmetry.** `n_passes` (default 10) averages out equivariance error over the specified number of forward passes. If `symmetrize` (default True) is set, an additional `n_passes` are also performed on the mirror image of the input geometry (for a total of `2*n_passes`).
-- **Geometry.** MagNET-Zero and MagNET-PCM require AIMNet2-optimized geometries. Do not use other geometries.
+- **Geometry.** MagNET-Zero and MagNET-PCM require [AIMNet2](https://github.com/isayevlab/AIMNet2)-optimized geometries. Do not use other geometries.
 - **Components.** Pass `return_components=True` to also get the MagNET-Zero shielding, the MagNET-PCM correction, and the scaling coefficients behind each shift, as a `dict`.
 - **Other models.** For raw shieldings and solvent corrections, see the [API documentation](#api-documentation).
   
@@ -155,16 +154,16 @@ If you only want to download a single dataset, add
 
 | dataset | size | contents |
 |---|---|---|
-| `sigma-shake` | 2.2 GB | main training set: 4.4M GDB solutes, perturbed geometries, PBE0/pcSseg-1 shieldings |
-| `sigma-fresh` | 30 GB | explicit-solvent poses: 10K solutes in benzene, chloroform, methanol, and water |
+| `sigma-shake` | 2.2 GB | 4.4M GDB solutes, perturbed geometries, PBE0/pcSseg-1 shieldings |
+| `sigma-fresh` | 30 GB | 10K solutes in explicit benzene, chloroform, methanol, and water |
 | `sigma-pepper` | 501 MB | AIMNet2 GDB structures used to train MagNET-Zero and MagNET-PCM |
 | `sigma-concentrate` | 17 MB | PCM corrections on 50K *sigma*-shake structures |
 | `delta22` | 2.5 GB | experimental <sup>1</sup>H/<sup>13</sup>C shifts with matched DFT and MagNET predictions |
-| `dft8k` | 12 MB | external benchmark of 7111 organics (Guan and Paton), two levels of theory |
-| `gdb_qcd` | 291 MB | quasiclassical-dynamics benchmark of 2461 GDB molecules, for rovibrational corrections |
-| `magnet_test_predictions` | 822 MB | MagNET's raw per-atom predictions and DFT targets on the test sets |
-| `applications` | 5.1 GB | natural-product evaluation set, with MD geometries and experimental shifts |
-| `supertestset_magnet_x` | 1.2 MB | explicit-solvent test set for MagNET-x: isolated vs solvated DFT shieldings |
+| `dft8k` | 12 MB | external benchmark of 7111 organics |
+| `gdb_qcd` | 291 MB | quasiclassical dynamics of 2461 GDB molecules |
+| `magnet_test_predictions` | 822 MB | MagNET predictions and DFT targets |
+| `applications` | 5.1 GB | natural product MD geometries and experimental shifts |
+| `supertestset_magnet_x` | 1.2 MB | explicit solvent test set for MagNET-x |
 
 ### Reproducing Figures and Tables
 
@@ -186,7 +185,7 @@ pip install -r requirements.txt "pytest>=7"
 pytest
 ```
 
-The tests use small synthetic fixtures and do not need the downloaded files. Any test that does require the large model weights or datasets is skipped automatically when they are absent, and runs once they have been downloaded.
+The tests use small synthetic fixtures. If the large files are present, then more comprehensive tests will run. The `magnet` package tests need the Option B checkout with the inference stack installed (`pip install -r magnet/requirements.txt`); without PyTorch they are skipped.
 
 ### API Documentation
 
@@ -203,7 +202,7 @@ API: `predict_shifts`, `predict_shieldings`, `implicit_solvent_correction`,
 
 "Chemical Shift Prediction Beyond the Electronic Structure Limit."
 
-Adams, K.; Wagen, C.C.W.; Wolford, J.; Sak, M.H.; Saurí, J.; Feng, Z.; Bhadauria, A.S.; Bailey, M.A.; Downs, J.S.; Li, S.Z.; Liu, A.I.; Smidt, T.; Paton, R.S.; Liu, R.Y.; Coley, C.W.\*; Kwan, E.E.\*
+Adams, K.; Wagen, C.C.; Wolford, J.; Sak, M.H.; Saurí, J.; Feng, Z.; Bhadauria, A.S.; Bailey, M.A.; Downs, J.S.; Li, S.Z.; Liu, A.I.; Smidt, T.; Paton, R.S.; Liu, R.Y.; Coley, C.W.\*; Kwan, E.E.\*
 
 *submitted*, July 2026.
 
@@ -211,5 +210,5 @@ Adams, K.; Wagen, C.C.W.; Wolford, J.; Sak, M.H.; Saurí, J.; Feng, Z.; Bhadauri
 
 - The original code, model weights, and datasets in this repository are released under the MIT License (see [`LICENSE`](LICENSE)).
 - Third-party literature data redistributed here remains subject to its original publications' terms and should be
-cited accordingly: the Goodman CP3 spreadsheet (`data/cp3/`), the Schattenberg and Kaupp NS372
-spreadsheet (`data/ns372/`), and the DFT8K benchmark (`data/dft8k/`, from Guan and Paton).
+cited accordingly: CP3 (`data/cp3/`, Smith and Goodman), NS372
+ (`data/ns372/`, Schattenberg and Kaupp), and DFT8K (`data/dft8k/`, Guan and Paton).

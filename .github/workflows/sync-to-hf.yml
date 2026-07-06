@@ -48,8 +48,13 @@ jobs:
         # files never belong in the code repo). On the Hub those SAME files ARE the payload, and the
         # Hub's preupload endpoint reads a repo-level .gitignore and refuses to upload anything it
         # matches. Syncing GitHub's .gitignore here would therefore block every future dataset push.
+        #
+        # *.mnova/*.ckpt are excluded as defense-in-depth (all gitignored, so a fresh checkout has
+        # none). *.hdf5 is NOT excluded: one tiny .hdf5 (data/delta50/delta50.hdf5) is deliberately
+        # tracked in the code repo, so it must be allowed to sync. The big datasets stay out because
+        # they are gitignored and thus absent from the checkout, not because of an --exclude here.
         run: |
           hf upload ekwan16/MagNET . . \
             --repo-type=model \
-            --exclude ".git/**" ".github/**" ".gitignore" "*.hdf5" "*.mnova" "*.ckpt" \
+            --exclude ".git/**" ".github/**" ".gitignore" "*.mnova" "*.ckpt" \
             --commit-message "sync code from github@${{ github.sha }}"

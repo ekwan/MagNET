@@ -1,4 +1,4 @@
-"""Reproduces the delta-22 composite-formula ablation study behind SI Figure S15's Excel screenshots.
+"""Reproduces the delta-22 composite-formula ablation study (the ablations.xlsx workbook).
 
 Rebuilds `ablations.xlsx`: ~25 composite-formula variants (stationary geometry plus some combination
 of implicit PCM, explicit Desmond, and rovibrational QCD corrections) across all 12 delta-22 solvents,
@@ -110,8 +110,8 @@ CARBON_FORMULA_CONFIG = {
 _FORMULA_CONFIG = {"H": PROTON_FORMULA_CONFIG, "C": CARBON_FORMULA_CONFIG}
 
 # This ablation study fits plain OLS composite formulas, not an ML model. The canonical SI text
-# for Figure S15 states that "since no ML was used in this particular analysis, all 22 molecules
-# were considered, including nitromethane" -- other, ML-related analyses (e.g. scaling_factors.py's
+# for this ablation analysis states that "since no ML was used in this particular analysis, all 22
+# molecules were considered, including nitromethane" -- other, ML-related analyses (e.g. scaling_factors.py's
 # EXCLUDE_SOLUTES) drop nitromethane as an ML-training outlier; this module's default excludes nothing.
 EXCLUDE_SOLUTES = ()
 

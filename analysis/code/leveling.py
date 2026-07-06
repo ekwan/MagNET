@@ -274,43 +274,42 @@ DELTA22_REF = 'DSD-PBEP86'
 
 def load_delta22(path):
     """Load the delta22 shielding matrix, sorted by family, for 1H and 13C sites."""
-    f = h5py.File(path, 'r')
-    mn = [m.decode() for m in f['conventional_nmr_method_names'][:]]
-    order = ['hf', 'blyp_d3bj', 'bp86_d3bj', 'b97d3_d3bj', 'tpsstpss_d3bj',
-             'b3lyp_d3bj', 'pbe0_d3bj', 'm062x_d3', 'wb97xd', 'wp04', 'wc04',
-             'B2PLYP', 'mPW2PLYP', 'B2GP_PLYP', 'dsd_pbep86', 'revdsd_pbep86',
-             'mp2', 'dlpno_mp2']
-    disp = {'hf': 'HF', 'blyp_d3bj': 'BLYP-D3', 'bp86_d3bj': 'BP86-D3',
-            'b97d3_d3bj': 'B97D3', 'tpsstpss_d3bj': 'TPSS-D3', 'b3lyp_d3bj': 'B3LYP-D3',
-            'pbe0_d3bj': 'PBE0-D3', 'm062x_d3': 'M06-2X-D3', 'wb97xd': 'ωB97X-D',
-            'wp04': 'WP04', 'wc04': 'WC04', 'B2PLYP': 'B2PLYP', 'mPW2PLYP': 'mPW2PLYP',
-            'B2GP_PLYP': 'B2GP-PLYP', 'dsd_pbep86': 'DSD-PBEP86',
-            'revdsd_pbep86': 'revDSD-PBEP86', 'mp2': 'MP2', 'dlpno_mp2': 'DLPNO-MP2'}
-    fam = {'hf': 'WFT', 'blyp_d3bj': 'GGA', 'bp86_d3bj': 'GGA', 'b97d3_d3bj': 'GGA',
-           'tpsstpss_d3bj': 'mGGA', 'b3lyp_d3bj': 'GH', 'pbe0_d3bj': 'GH',
-           'm062x_d3': 'GH', 'wb97xd': 'RSH', 'wp04': 'GH', 'wc04': 'GH',
-           'B2PLYP': 'DH', 'mPW2PLYP': 'DH', 'B2GP_PLYP': 'DH', 'dsd_pbep86': 'DH',
-           'revdsd_pbep86': 'DH', 'mp2': 'WFT', 'dlpno_mp2': 'WFT'}
-    gas = {}
-    for i, m in enumerate(mn):
-        func, basis, smodel, _ = m.split(',')
-        if smodel == 'gas':
-            gas.setdefault(func, {})[basis] = i
-    sel, labels, families = [], [], []
-    for func in order:
-        b = gas[func]
-        big = 'pcSseg3' if 'pcSseg3' in b else ('pcSseg2' if 'pcSseg2' in b else 'pcSseg1')
-        sel.append(b[big]); labels.append(disp[func]); families.append(fam[func])
-    GEOM = 1  # geometries axis: 0 = AIMNet2, 1 = PBE0/cc-pVTZ
-    rows = {1: [], 6: []}
-    for s in f['solutes']:
-        an = f['solutes'][s]['atomic_numbers'][:]
-        cs = _decode_fixed_point(
-            f['solutes'][s]['stationary_and_pcm']['conventional_shieldings'][:, GEOM, :])
-        for ai, z in enumerate(an):
-            if z in (1, 6):
-                rows[int(z)].append(cs[sel, ai])
-    f.close()
+    with h5py.File(path, 'r') as f:
+        mn = [m.decode() for m in f['conventional_nmr_method_names'][:]]
+        order = ['hf', 'blyp_d3bj', 'bp86_d3bj', 'b97d3_d3bj', 'tpsstpss_d3bj',
+                 'b3lyp_d3bj', 'pbe0_d3bj', 'm062x_d3', 'wb97xd', 'wp04', 'wc04',
+                 'B2PLYP', 'mPW2PLYP', 'B2GP_PLYP', 'dsd_pbep86', 'revdsd_pbep86',
+                 'mp2', 'dlpno_mp2']
+        disp = {'hf': 'HF', 'blyp_d3bj': 'BLYP-D3', 'bp86_d3bj': 'BP86-D3',
+                'b97d3_d3bj': 'B97D3', 'tpsstpss_d3bj': 'TPSS-D3', 'b3lyp_d3bj': 'B3LYP-D3',
+                'pbe0_d3bj': 'PBE0-D3', 'm062x_d3': 'M06-2X-D3', 'wb97xd': 'ωB97X-D',
+                'wp04': 'WP04', 'wc04': 'WC04', 'B2PLYP': 'B2PLYP', 'mPW2PLYP': 'mPW2PLYP',
+                'B2GP_PLYP': 'B2GP-PLYP', 'dsd_pbep86': 'DSD-PBEP86',
+                'revdsd_pbep86': 'revDSD-PBEP86', 'mp2': 'MP2', 'dlpno_mp2': 'DLPNO-MP2'}
+        fam = {'hf': 'WFT', 'blyp_d3bj': 'GGA', 'bp86_d3bj': 'GGA', 'b97d3_d3bj': 'GGA',
+               'tpsstpss_d3bj': 'mGGA', 'b3lyp_d3bj': 'GH', 'pbe0_d3bj': 'GH',
+               'm062x_d3': 'GH', 'wb97xd': 'RSH', 'wp04': 'GH', 'wc04': 'GH',
+               'B2PLYP': 'DH', 'mPW2PLYP': 'DH', 'B2GP_PLYP': 'DH', 'dsd_pbep86': 'DH',
+               'revdsd_pbep86': 'DH', 'mp2': 'WFT', 'dlpno_mp2': 'WFT'}
+        gas = {}
+        for i, m in enumerate(mn):
+            func, basis, smodel, _ = m.split(',')
+            if smodel == 'gas':
+                gas.setdefault(func, {})[basis] = i
+        sel, labels, families = [], [], []
+        for func in order:
+            b = gas[func]
+            big = 'pcSseg3' if 'pcSseg3' in b else ('pcSseg2' if 'pcSseg2' in b else 'pcSseg1')
+            sel.append(b[big]); labels.append(disp[func]); families.append(fam[func])
+        GEOM = 1  # geometries axis: 0 = AIMNet2, 1 = PBE0/cc-pVTZ
+        rows = {1: [], 6: []}
+        for s in f['solutes']:
+            an = f['solutes'][s]['atomic_numbers'][:]
+            cs = _decode_fixed_point(
+                f['solutes'][s]['stationary_and_pcm']['conventional_shieldings'][:, GEOM, :])
+            for ai, z in enumerate(an):
+                if z in (1, 6):
+                    rows[int(z)].append(cs[sel, ai])
     out = {}
     for nuc, z in (('1H', 1), ('13C', 6)):
         M = np.array(rows[z])

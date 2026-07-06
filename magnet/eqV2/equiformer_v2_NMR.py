@@ -4,7 +4,6 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from pyexpat.model import XML_CQUANT_OPT
 
 from .ocpmodels.common.registry import registry
 from .ocpmodels.common.utils import conditional_grad
@@ -422,8 +421,7 @@ class EquiformerV2_NMR(BaseModel):
             edge_index = edge_index[:, ~remove_solvent_edge]
             edge_distance = edge_distance[~remove_solvent_edge]
             edge_distance_vec = edge_distance_vec[~remove_solvent_edge]
-            neighbors = torch.ones_like(neighbors) * edge_index.shape[1]
-        
+
         #print(edge_index.shape)
 
         

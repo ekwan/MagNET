@@ -790,7 +790,7 @@ def test_fig2a_reproduces_published_magnet_point():
         assert got == pytest.approx(expected, abs=1e-4), f"{nucleus}: {got} vs {expected}"
 
 
-# --- SI Figure S15's "Correlations Between Features" ---------------------------------------------
+# --- Composite-formula ablation workbook's "Correlations Between Features" -----------------------
 
 def test_feature_correlation_matrix_synthetic():
     # a and b perfectly correlated, c independent noise uncorrelated with either
@@ -841,9 +841,10 @@ def test_average_feature_correlation_matrix_ignores_a_solvent_with_too_few_sites
 @pytest.mark.skipif(
     not (os.path.exists(REAL_H5) and os.path.exists(REAL_XLSX)),
     reason="real delta22.hdf5 / experimental xlsx not present")
-def test_si_s15_feature_correlations_reproduces_published_matrices():
+def test_ablations_feature_correlations_reproduces_published_matrices():
     """Every entry of both nuclei's published Pearson R and R^2 "Correlations Between Features"
-    matrices (SI Figure S15), reproduced from the released data to 3 decimal places. Guards against
+    matrices (the composite-formula ablation workbook), reproduced from the released data to 3
+    decimal places. Guards against
     pooling all DFT methods/bases/geometries together instead of filtering to the MagNET-Zero
     reference level, which throws entries off by up to 0.03."""
     dft = D.load_query_df_dft(REAL_H5, REAL_XLSX, verbose=False)
@@ -866,7 +867,7 @@ def test_si_s15_feature_correlations_reproduces_published_matrices():
               ("qcd", "stationary"): 0.380, ("qcd", "pcm"): 0.404, ("qcd", "desmond"): 0.189, ("qcd", "desmond_vib"): 0.021},
     }
     for nucleus in ("H", "C"):
-        corr = D.si_s15_feature_correlations(dft, nucleus)
+        corr = D.ablations_feature_correlations(dft, nucleus)
         for (a, b), expected in published_r[nucleus].items():
             assert corr["r"].loc[a, b] == pytest.approx(expected, abs=5e-4), f"{nucleus} r[{a},{b}]"
         for (a, b), expected in published_r2[nucleus].items():

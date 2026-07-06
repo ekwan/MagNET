@@ -102,6 +102,17 @@ def test_decode_roundtrip_and_missing():
     assert np.isnan(_decode(enc_with_miss)[-1])
 
 
+def test_decode_int64_is_still_scaled():
+    # a rebuild that stored the columns as int64 (any integer width) must decode the same way as
+    # int32; the old exact `dtype == np.int32` check fell through and returned raw scaled integers.
+    vals = np.array([1.2345, -50.0, 0.0], dtype=np.float64)
+    enc = _enc(vals).astype(np.int64)
+    out = _decode(enc)
+    assert np.allclose(out, vals, atol=5e-5)
+    enc_with_miss = np.append(enc, np.int64(-2147483648))
+    assert np.isnan(_decode(enc_with_miss)[-1])
+
+
 def test_solutes_and_solvents_group_excluded(fake_release):
     assert set(fake_release.solutes()) == {"vomicine", "isomer_1E"}
 

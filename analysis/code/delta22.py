@@ -721,15 +721,15 @@ def correlation_matrix(query_df, value_col, sites_index, column_var):
     return pivot.corr()
 
 
-# SI Figure S15 "Correlations Between Features": correlations among the composite features within
-# one nucleus and solvent.
+# Composite-formula ablation workbook, "Correlations Between Features": correlations among the
+# composite features within one nucleus and solvent.
 FEATURE_CORRELATION_COLUMNS = ("stationary", "pcm", "desmond", "desmond_vib", "qcd")
 
 
 def feature_correlation_matrix(query_df, nucleus, solvent, cols=FEATURE_CORRELATION_COLUMNS, squared=False):
     """Pearson correlation matrix (R^2 if squared=True) between the feature columns, within one
     nucleus and solvent, over sites where both features have a value. query_df must be filtered to a
-    single (sap_nmr_method, sap_basis, sap_geometry_type); si_s15_feature_correlations does that."""
+    single (sap_nmr_method, sap_basis, sap_geometry_type); ablations_feature_correlations does that."""
     sub = query_df[(query_df["nucleus"] == nucleus) & (query_df["solvent"] == solvent)][list(cols)]
     sub = sub.dropna(how="all")
     if len(sub) < 2:
@@ -740,7 +740,7 @@ def feature_correlation_matrix(query_df, nucleus, solvent, cols=FEATURE_CORRELAT
 
 def average_feature_correlation_matrix(query_df, nucleus, solvents, cols=FEATURE_CORRELATION_COLUMNS,
                                        squared=False):
-    """Cell-by-cell nanmean of feature_correlation_matrix over the solvents (SI Figure S15's
+    """Cell-by-cell nanmean of feature_correlation_matrix over the solvents (the ablation workbook's
     solvent-averaged matrix). nanmean so a solvent with too few sites for one feature pair drops out
     of that cell alone, not the whole average. Same single-level-of-theory requirement."""
     mats = [feature_correlation_matrix(query_df, nucleus, s, cols, squared) for s in solvents]
@@ -750,7 +750,7 @@ def average_feature_correlation_matrix(query_df, nucleus, solvents, cols=FEATURE
     return pd.DataFrame(avg, index=mats[0].index, columns=mats[0].columns)
 
 
-def si_s15_feature_correlations(query_df_dft, nucleus, solvents=None):
+def ablations_feature_correlations(query_df_dft, nucleus, solvents=None):
     """Solvent-averaged feature correlations for one nucleus from the unfiltered
     load_query_df_dft(...) output: filters to the reference level
     (MAGNET_PCM_OUTPUT_METHODS[nucleus], pcSseg2, aimnet2), then returns {"r": Pearson R matrix,
@@ -765,9 +765,9 @@ def si_s15_feature_correlations(query_df_dft, nucleus, solvents=None):
 
 
 def pcm_desmond_correlation_by_solvent(query_df_dft, solvents=None):
-    """SI Figure S15's PCM-vs-Desmond table: per nucleus and solvent, the Pearson correlation
+    """The ablation workbook's PCM-vs-Desmond table: per nucleus and solvent, the Pearson correlation
     between the PCM (implicit) and Desmond (explicit) corrections. Filters to the reference level
-    per nucleus itself (same as si_s15_feature_correlations). Returns a DataFrame indexed by
+    per nucleus itself (same as ablations_feature_correlations). Returns a DataFrame indexed by
     nucleus, one column per solvent."""
     solvents = list(solvents) if solvents is not None else sorted(query_df_dft["solvent"].unique())
     rows = {}

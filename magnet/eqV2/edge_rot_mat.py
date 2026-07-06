@@ -5,15 +5,17 @@ def init_edge_rot_mat(edge_distance_vec):
     edge_vec_0 = edge_distance_vec
     edge_vec_0_distance = torch.sqrt(torch.sum(edge_vec_0**2, dim=1))
 
-    # Make sure the atoms are far enough apart
-    #assert torch.min(edge_vec_0_distance) < 0.0001
-    if torch.min(edge_vec_0_distance) < 0.0001:
-        print(
-            "Error edge_vec_0_distance: {}".format(
-                torch.min(edge_vec_0_distance)
-            )
+    # Two atoms at (nearly) the same position cannot define a local frame: the normalization below
+    # would divide by ~zero and silently produce NaN or a garbage frame that propagates through the
+    # whole forward pass. Refuse the input instead. This is reachable from raw geometries, e.g.
+    # overlapping atoms in an unrelaxed explicit-solvent snapshot.
+    min_distance = torch.min(edge_vec_0_distance)
+    if min_distance < 0.0001:
+        raise ValueError(
+            f"overlapping atoms: smallest interatomic distance {float(min_distance):.2e} is too "
+            "small to define a local frame; check the input geometry for coincident atoms"
         )
-        
+
     norm_x = edge_vec_0 / (edge_vec_0_distance.view(-1, 1))
 
     edge_vec_2 = torch.rand_like(edge_vec_0) - 0.5

@@ -144,6 +144,17 @@ def test_decode_passes_floats_through():
     np.testing.assert_array_equal(_decode_fixed_point(f), f)
 
 
+def test_decode_int64_is_still_scaled():
+    # a rebuild that stored the fixed-point columns as int64 (any integer width) must decode the
+    # same way as int32; the old exact `dtype == np.int32` check fell through and returned the raw
+    # scaled integers as if they were ppm.
+    enc = np.array([2070700, _MISSING_MARKER, -150000], np.int64)
+    out = _decode_fixed_point(enc)
+    assert out[0] == pytest.approx(207.07)
+    assert np.isnan(out[1])
+    assert out[2] == pytest.approx(-15.0)
+
+
 # ---- the full reader against the synthetic file ----
 EXPECTED_COLUMNS = ["experimental", "stationary", "qcd", "pcm",
                     "desmond", "openMM", "desmond_vib", "openMM_vib"]

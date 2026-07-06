@@ -92,9 +92,9 @@ print("Symmetrized deployment Table S11 (13C):"); display(symmetrized["C"])
     md(r"""
 ## Composite-model coefficients (Figure 5C/5D, SI S15)
 
-The natural-products figures use a larger family of per-solvent coefficients fit on delta-22 (the
-`composite_model` group in `applications.hdf5`): OLS fits, 1000-seed bootstrap resamples, their RMSE
-distributions, and the PCM conversion factors. The group regenerates from released inputs alone.
+The natural-products figures use a larger family of per-solvent coefficients fit on delta-22: OLS
+fits, 1000-seed bootstrap resamples, their RMSE distributions, and the PCM conversion factors. These
+regenerate from released inputs alone.
 """),
     code(r"""
 reader = Applications(paths.dataset_file("applications", root=REPO))

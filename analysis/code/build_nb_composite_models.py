@@ -54,13 +54,13 @@ N_SPLITS = 250
 
 si_composite_models_ablations = [
     md(r"""
-# SI Figure S15: composite-formula ablation workbook (`ablations.xlsx`)
+# Composite-formula ablation workbook
 
-Rebuilds the `ablations.xlsx` workbook behind ~32 of SI Figure S15's images: ~25 composite-formula
-variants (stationary geometry plus some combination of implicit PCM, explicit Desmond, and
-rovibrational QCD corrections) across all 12 delta-22 solvents, at two reference levels:
-DSD-PBEP86/pcSseg-3 (geometry PBE0/tz) and the MagNET-Zero training reference (WP04/pcSseg-2 for ¹H,
-wB97X-D/pcSseg-2 for ¹³C).
+Rebuilds the composite-formula ablation grid: ~25 composite-formula variants (stationary geometry
+plus some combination of implicit PCM, explicit Desmond, and rovibrational QCD corrections) across
+all 12 delta-22 solvents, at two reference levels: DSD-PBEP86/pcSseg-3 (geometry PBE0/tz) and the
+MagNET-Zero training reference (WP04/pcSseg-2 for ¹H, ωB97X-D/pcSseg-2 for ¹³C). Also reports the
+solvent-averaged correlations between the composite-model features.
 """),
     code(_BOOTSTRAP),
     code(_IMPORTS),
@@ -93,13 +93,13 @@ PCM-vs-Desmond table.
 """),
     code(r"""
 for nucleus, label in [("H", "Proton"), ("C", "Carbon")]:
-    corr = delta22.si_s15_feature_correlations(query_df_dft, nucleus)
+    corr = delta22.ablations_feature_correlations(query_df_dft, nucleus)
     nuc_label = "1H" if nucleus == "H" else "13C"
     nuc_title = "$^{1}$H" if nucleus == "H" else "$^{13}$C"
     composite_plots.plot_feature_correlation_heatmap(
         corr["r"], vmin=-1, vmax=1, cmap="RdBu",
         title=f"Solvent-Averaged Pearson $r$ Correlation Matrix for {nuc_title}",
-        save_path=figure_path(f"si_figure_s15_feature_corr_r_{nuc_label}.png"))
+        save_path=figure_path(f"ablations_feature_corr_r_{nuc_label}.png"))
 plt.show()
 """),
     code(r"""
@@ -107,7 +107,7 @@ pcm_desmond_corr = delta22.pcm_desmond_correlation_by_solvent(query_df_dft)
 print("PCM vs. Desmond Pearson R by nucleus and solvent:")
 display(pcm_desmond_corr.round(3))
 composite_plots.plot_pcm_desmond_correlation_table(pcm_desmond_corr,
-                                   save_path=figure_path("si_figure_s15_pcm_desmond_corr_table.png"))
+                                   save_path=figure_path("ablations_pcm_desmond_corr_table.png"))
 plt.show()
 """),
 ]

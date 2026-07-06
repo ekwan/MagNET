@@ -39,7 +39,7 @@ _MISSING_MARKER = -2147483648
 
 def _decode_fixed_point(values):
     values = np.asarray(values)
-    if values.dtype == np.int32:
+    if np.issubdtype(values.dtype, np.integer):
         out = values.astype(np.float64) / _FIXED_POINT_SCALE
         out[values == _MISSING_MARKER] = np.nan
         return out
@@ -74,7 +74,7 @@ def _sort_and_parse_raw_shieldings(shield_df):
         value_list = [v for v in value_list if v]
         try:
             return [float(i) for i in value_list]
-        except:
+        except (ValueError, TypeError):
             return []
 
     def _to_float_list(x):

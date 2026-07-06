@@ -1,6 +1,6 @@
-"""Correlation-heatmap panels for the composite-model ablation SI figure (Figure S15).
+"""Correlation-heatmap panels for the composite-formula ablation workbook.
 
-Two seaborn heatmaps behind Figure S15's feature-correlation panels: a per-nucleus lower-triangle
+Two seaborn heatmaps behind the ablation workbook's feature-correlation panels: a per-nucleus lower-triangle
 correlation matrix among the five composite-model features (stationary shielding, PCM, Desmond, its
 vibrational analogue, QCD), and a PCM-vs-Desmond Pearson r table by nucleus and solvent. The notebook
 supplies the correlation table(s) computed by delta22.py and calls these functions directly.

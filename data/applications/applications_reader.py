@@ -28,7 +28,7 @@ SHELL_SIZES = [50, 150, 250, 350, 450, 550, 650]
 def _decode(values):
     """Turn stored whole numbers back into real values; blanks where data is missing."""
     values = np.asarray(values)
-    if values.dtype == np.int32:
+    if np.issubdtype(values.dtype, np.integer):
         out = values.astype(np.float64) / _SCALE
         out[values == _MISSING_MARKER] = np.nan
         return out
