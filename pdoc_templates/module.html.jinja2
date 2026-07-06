@@ -1,0 +1,9 @@
+{% extends "default/module.html.jinja2" %}
+{% block style %}
+    {{ super() }}
+    <style>
+        /* Widen the content column so wide tables (e.g. the supported-solvent table) are not clipped. */
+        main, header { width: calc(78rem + var(--sidebar-width)); }
+        .pdoc table { width: 100%; }
+    </style>
+{% endblock %}

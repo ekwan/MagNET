@@ -1,0 +1,38 @@
+# Dependencies for the dataset readers, the analysis code, and reproducing the figures/tables
+# (reproduce.py). This is NOT the inference stack: `pip install magnet-nmr` and the Option B checkout
+# pull torch from magnet/pyproject.toml and magnet/requirements.txt instead, so nothing here reaches
+# an inference-only install.
+# Loose floors so a future release can't silently break CI; tests also need pytest.
+# numpy + h5py cover the sigma readers; the delta22 reader additionally uses
+# pandas (DataFrame assembly), openpyxl (reads the experimental .xlsx), and tqdm.
+numpy>=1.20
+h5py>=3.0
+pandas>=1.3
+openpyxl>=3.0
+tqdm>=4.0
+# the leveling-effect analysis (analysis/code/leveling.py) and its tests use scikit-learn
+# for the principal-components step. matplotlib + adjustText are needed only to redraw its
+# figures, not to run the tests, so they are not listed here.
+scikit-learn>=1.0
+# the applications analysis (analysis/code/applications.py) fits the composite linear model with
+# statsmodels. Its figure notebooks also draw boxplots with matplotlib + seaborn; those are needed
+# only to redraw the figures (not to run the readers or the tests), and seaborn pulls matplotlib in
+# as a dependency.
+statsmodels>=0.13
+seaborn>=0.12
+# the DFT8K functional-group analysis (analysis/code/dft8k_residuals.py's
+# functional_group_errors/find_extreme_residual, used by fig5b_dft8k.ipynb) parses each molecule's
+# SMILES and matches functional-group substructures with RDKit. Not needed for the rest of the
+# repo's readers or tests.
+rdkit>=2023.9
+
+# Reproducing the figures and tables (reproduce.py) executes the analysis notebooks, which draw with
+# matplotlib (adjustText places the leveling-figure labels) and use scipy directly. matplotlib and
+# scipy already arrive transitively via seaborn and scikit-learn; they are listed explicitly because
+# the notebooks import them. nbconvert + ipykernel are the headless notebook-execution stack
+# reproduce.py drives; they are the only reason a plain reader/test run does not need them.
+matplotlib>=3.5
+scipy>=1.7
+adjustText>=1.0
+nbconvert>=7.0
+ipykernel>=6.0

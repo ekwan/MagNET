@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "magnet-nmr"
+version = "0.1.0"
+description = "MagNET: equivariant neural networks for NMR chemical-shift (shielding) prediction"
+readme = {text = "MagNET: equivariant neural networks for NMR chemical-shift (shielding) prediction. Models, datasets, install instructions, and usage examples are at https://github.com/ekwan/MagNET", content-type = "text/markdown"}
+requires-python = ">=3.9"
+license = "MIT"
+
+# torch_geometric is pinned to 2.6.x because 2.7+ requires pyg-lib for radius_graph.
+#
+# torch_scatter and torch_cluster are deliberately NOT listed here. They have no plain-PyPI
+# wheels for our platforms, so pip would try to build them from source and fail; they must come
+# from the PyG wheel index, keyed to the exact torch version:
+#     pip install torch_scatter torch_cluster --find-links https://data.pyg.org/whl/torch-2.5.0+cpu.html
+# The `pyg` extra records this so `pip install magnet-nmr[pyg]` documents the two, but the
+# --find-links index is still required for the install to resolve.
+dependencies = [
+    "torch==2.5.0",
+    "torch_geometric==2.6.1",
+    "pytorch_lightning>=2.0",
+    "e3nn>=0.5",
+    "numpy",
+]
+
+[project.optional-dependencies]
+examples = ["h5py"]
+pyg = ["torch_scatter", "torch_cluster"]
+
+# The importable package `magnet` lives in this directory (package-dir maps it to ".").
+[tool.setuptools]
+packages = [
+    "magnet",
+    "magnet.eqV2",
+    "magnet.eqV2.ocpmodels",
+    "magnet.eqV2.ocpmodels.common",
+    "magnet.eqV2.ocpmodels.models",
+    "magnet.eqV2.ocpmodels.models.scn",
+]
+
+[tool.setuptools.package-dir]
+"magnet" = "."
+
+# the Wigner-D rotation table that wigner.py loads at import time
+[tool.setuptools.package-data]
+"magnet.eqV2" = ["Jd.pt"]

@@ -1,0 +1,32 @@
+# MagNET inference dependencies (CPU; tested on Apple Silicon arm64 and Linux x86-64).
+#
+# Two non-obvious points are baked in below:
+#   1. torch_scatter and torch_cluster are NOT on plain PyPI for macOS arm64. They come
+#      from the PyG wheel index, which is keyed to the EXACT torch version. The
+#      --find-links line points pip at the matching prebuilt wheels for torch 2.5.0 + CPU.
+#   2. torch_geometric is PINNED to 2.6.x. From 2.7 onward, radius_graph requires pyg-lib
+#      (which has no Apple-Silicon wheel); 2.6.x still dispatches radius_graph to
+#      torch_cluster, which is what the model needs.
+#
+# Install torch first, then this file, or just run this file twice if a fresh
+# environment resolves torch_scatter before torch:
+#   pip install torch==2.5.0
+#   pip install -r requirements.txt
+#
+# On a Linux machine with CUDA, `pip install torch==2.5.0` defaults to the multi-gigabyte GPU build.
+# This is a CPU stack, so install the CPU build explicitly first:
+#   pip install torch==2.5.0 --index-url https://download.pytorch.org/whl/cpu
+
+--find-links https://data.pyg.org/whl/torch-2.5.0+cpu.html
+
+torch==2.5.0
+torch_scatter
+torch_cluster
+torch_geometric==2.6.1
+pytorch_lightning>=2.0
+e3nn>=0.5
+numpy
+
+# Only needed to run the bundled examples/tests that read the .hdf5 datasets
+# (the model itself does not import h5py):
+h5py

@@ -1,0 +1,51 @@
+name: sync code to hugging face
+
+# Mirrors the CODE to the Hugging Face model repo ekwan16/MagNET on every push to main.
+#
+# The large model weights and datasets live ONLY on Hugging Face (as Git LFS objects). They are
+# gitignored here, so a fresh checkout never contains them, and they are pushed once by hand from a
+# workstation (see publish/build_hf_repo.py). This job must therefore NEVER delete anything on the
+# Hub.
+#
+# `hf upload` is additive/overwrite-only: it removes remote files ONLY when given an explicit
+# --delete flag.
+#   ==> NEVER add a --delete flag below. It would wipe the ~42 GB of LFS weights and datasets. <==
+# The --exclude patterns below are defense-in-depth for the big-file extensions (a fresh checkout
+# has none of them anyway); the actual safety comes from omitting --delete.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: sync-to-hf
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the Hugging Face CLI
+        # Pinned as defense-in-depth so a future CLI default cannot silently change behavior.
+        # Tighten to the exact version you tested with once you have run this successfully.
+        run: pip install "huggingface_hub[cli]>=0.34,<1.0"
+      - name: Ensure the target repo exists and is private
+        # `hf upload` auto-creates a MISSING repo as PUBLIC. If this Action ever fires before the
+        # repo has been seeded by hand, this guard creates it private first so nothing is exposed
+        # early. If the repo already exists this create call errors and `|| true` ignores it (it
+        # never changes an existing repo's visibility); a bad token still fails loudly at upload.
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}   # must be a WRITE token for ekwan16/MagNET
+        run: hf repo create ekwan16/MagNET --repo-type=model --private || true
+      - name: Upload code to the Hub (no deletions)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}   # must be a WRITE token for ekwan16/MagNET
+        run: |
+          hf upload ekwan16/MagNET . . \
+            --repo-type=model \
+            --exclude ".git/**" ".github/**" "*.hdf5" "*.mnova" "*.ckpt" \
+            --commit-message "sync code from github@${{ github.sha }}"

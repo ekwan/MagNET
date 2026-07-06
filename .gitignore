@@ -1,0 +1,37 @@
+# Large files live on the Hugging Face copy of this repo (ekwan16/MagNET), never committed here.
+*.hdf5
+*.h5
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.ckpt
+*.mnova
+model_checkpoints/
+# Exception: the tiny (54 KB) natural-products reference used by magnet/test_magnet.py is a committed
+# test fixture, so those tests are self-contained (they need only the released checkpoints, not a
+# separate reference download).
+!magnet/test_data/magnet_zero_and_pcm_shieldings.h5
+# Exception: delta50 is tiny (33 KB), so it ships with the repo instead of a Hugging Face download.
+!data/delta50/delta50.hdf5
+
+# Regenerated figure outputs (the notebook redraws them and embeds them in its own cells).
+analysis/**/figures/
+analysis/**/documents/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Rendered API docs (users regenerate with `pdoc magnet -t pdoc_templates -o api_docs`).
+api_docs/

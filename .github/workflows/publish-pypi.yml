@@ -1,0 +1,34 @@
+name: publish to PyPI
+
+# Builds the magnet-nmr package and publishes it to PyPI when you push a version tag (e.g. v0.1.0).
+#
+# Uses PyPI Trusted Publishing (OIDC), so there is no token to store: configure the trusted publisher
+# once at https://pypi.org/manage/project/magnet-nmr/settings/publishing/ with
+#   owner=ekwan  repo=MagNET  workflow=publish-pypi.yml  environment=pypi
+#
+# The package lives in the magnet/ subdirectory (its own pyproject.toml), so every step runs there.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write        # required for Trusted Publishing; no API token needed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        working-directory: magnet
+        run: |
+          pip install build
+          python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: magnet/dist/
