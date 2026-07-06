@@ -44,8 +44,12 @@ jobs:
       - name: Upload code to the Hub (no deletions)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}   # must be a WRITE token for ekwan16/MagNET
+        # NOTE: .gitignore is excluded on purpose. GitHub's .gitignore lists *.hdf5/*.ckpt (large
+        # files never belong in the code repo). On the Hub those SAME files ARE the payload, and the
+        # Hub's preupload endpoint reads a repo-level .gitignore and refuses to upload anything it
+        # matches. Syncing GitHub's .gitignore here would therefore block every future dataset push.
         run: |
           hf upload ekwan16/MagNET . . \
             --repo-type=model \
-            --exclude ".git/**" ".github/**" "*.hdf5" "*.mnova" "*.ckpt" \
+            --exclude ".git/**" ".github/**" ".gitignore" "*.hdf5" "*.mnova" "*.ckpt" \
             --commit-message "sync code from github@${{ github.sha }}"
