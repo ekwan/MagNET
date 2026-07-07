@@ -64,10 +64,6 @@ All models use Equiformer-V2 and have approximately 10M weights. Separate weight
    pip install -r magnet/requirements.txt
    pip install --no-deps ./magnet
    ```
-   
-   **<i>During the review process</i>**, the GitHub repository is private, so use a read-only token for cloning:
-   
-   `git clone https://<token>@github.com/ekwan/MagNET`
 
 2. **Fetch Model Weights**
 
@@ -77,10 +73,6 @@ All models use Equiformer-V2 and have approximately 10M weights. Separate weight
    ```
    
    The model weights will be downloaded into the working directory. No repository cloning is needed, as MagNET will automatically check the current directory for weights. Alternatively, you may pass the `checkpoints_dir` parameter to the inference methods.
-   
-   **<i>During the review process</i>**, the HuggingFace repository is private, so use a read-only token for downloading:
-   
-   `hf download ekwan16/MagNET --local-dir . --include "model_checkpoints/*" --token hf_xxx`
  
 3. **Check the Installation**
  
