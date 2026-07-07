@@ -194,9 +194,7 @@ You can render the API docs with [pdoc](https://pdoc.dev):
     pip install pdoc
     python build_api_docs.py
 
-Open `api_docs/index.html`. This documents the `magnet` package (`magnet.html` is the public
-API: `predict_shifts`, `predict_shieldings`, `implicit_solvent_correction`,
-`explicit_solvent_correction`) and every analysis module under `analysis/code`.
+Most people will only want to look at `api_docs/magnet.html` (the public API), though the other functions are documented as well.
 
 ### How to Cite
 
@@ -211,4 +209,4 @@ Adams, K.; Wagen, C.C.; Wolford, J.; Sak, M.H.; Saurí, J.; Feng, Z.; Bhadauria,
 - The original code, model weights, and datasets in this repository are released under the MIT License (see [`LICENSE`](LICENSE)).
 - Third-party literature data redistributed here remains subject to its original publications' terms and should be
 cited accordingly: CP3 (`data/cp3/`, Smith and Goodman), NS372
- (`data/ns372/`, Schattenberg and Kaupp), and DFT8K (`data/dft8k/`, Guan and Paton).
+ (`data/ns372/`, Schattenberg and Kaupp), DFT8K (`data/dft8k/`, Guan and Paton), and DELTA50 (`data/delta50/`, Cohen *et al.*).

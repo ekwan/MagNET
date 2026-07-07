@@ -12,7 +12,7 @@ model_checkpoints/
 # test fixture, so those tests are self-contained (they need only the released checkpoints, not a
 # separate reference download).
 !magnet/test_data/magnet_zero_and_pcm_shieldings.h5
-# Exception: delta50 is tiny (33 KB), so it ships with the repo instead of a Hugging Face download.
+# Exception: delta50 is tiny (47 KB), so it ships with the repo instead of a Hugging Face download.
 !data/delta50/delta50.hdf5
 
 # Regenerated figure outputs (the notebook redraws them and embeds them in its own cells).

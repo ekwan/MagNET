@@ -23,8 +23,9 @@ REAL = os.path.join(HERE, "delta50.hdf5")
 
 def _encode(values):
     v = np.asarray(values, dtype=np.float64)
-    out = np.round(v / SCALE).astype(np.int64)
-    out[~np.isfinite(v)] = MARKER
+    finite = np.isfinite(v)
+    out = np.full(v.shape, MARKER, dtype=np.int64)
+    out[finite] = np.round(v[finite] / SCALE).astype(np.int64)
     return out.astype(np.int32)
 
 
@@ -34,16 +35,21 @@ def _build_synthetic(path):
     names = ["alpha", "beta"]
     specs = [3, 5]  # n_atoms
     n_atoms = np.array(specs, dtype=np.int32)
-    an, coords, zero, b3, pcm, truth = [], [], [], [], [], []
+    an, coords, zero, b3, pcm, dwp, dwb, exp, truth = [], [], [], [], [], [], [], [], []
     for na in specs:
         a = rng.integers(1, 9, size=na).astype(np.uint8)
         c = rng.normal(0, 2, size=(na, 3))
         z = rng.normal(100, 30, size=na)
         g = rng.normal(100, 30, size=na)
         p = g + rng.normal(0, 0.2, size=na)
+        dw = z + rng.normal(0, 0.1, size=na)
+        db = z + rng.normal(0, 0.1, size=na)
+        e = rng.normal(5, 2, size=na)
+        e[a > 6] = np.nan  # heteroatoms have no experimental shift
         an.append(a); coords.append(_encode(c)); zero.append(_encode(z))
         b3.append(_encode(g)); pcm.append(_encode(p))
-        truth.append((a, c, z, g, p))
+        dwp.append(_encode(dw)); dwb.append(_encode(db)); exp.append(_encode(e))
+        truth.append((a, c, z, g, p, dw, db, e))
     opts = dict(compression="gzip", shuffle=True)
     with h5py.File(path, "w") as f:
         f.attrs["n_molecules"] = 2
@@ -57,6 +63,9 @@ def _build_synthetic(path):
         f.create_dataset("nn_magnet_zero", data=np.concatenate(zero), **opts)
         f.create_dataset("nn_b3lyp", data=np.concatenate(b3), **opts)
         f.create_dataset("nn_b3lyp_pcm", data=np.concatenate(pcm), **opts)
+        f.create_dataset("shielding_wp04_pcSseg2", data=np.concatenate(dwp), **opts)
+        f.create_dataset("shielding_wb97xd_pcSseg2", data=np.concatenate(dwb), **opts)
+        f.create_dataset("experimental_shift", data=np.concatenate(exp), **opts)
     return names, specs, truth
 
 
@@ -68,12 +77,17 @@ def test_reader_and_decode(tmp_path):
         assert ds.molecule_names == names
         for i, na in enumerate(specs):
             m = ds.molecule(i)
-            a, c, z, g, p = truth[i]
+            a, c, z, g, p, dw, db, e = truth[i]
             assert m["name"] == names[i]
             assert np.array_equal(m["atomic_numbers"], a)
             assert m["coordinates"].shape == (na, 3)
             assert np.abs(m["coordinates"] - c).max() <= 5e-5
             assert np.abs(m["nn_magnet_zero"] - z).max() <= 5e-5
+            assert np.abs(m["shielding_wp04_pcSseg2"] - dw).max() <= 5e-5
+            assert np.abs(m["shielding_wb97xd_pcSseg2"] - db).max() <= 5e-5
+            finite = np.isfinite(e)
+            assert np.abs(m["experimental_shift"][finite] - e[finite]).max() <= 5e-5
+            assert np.isnan(m["experimental_shift"][~finite]).all()
             assert np.allclose(ds.pcm_correction(i), p - g, atol=1e-4)
 
 
@@ -98,6 +112,16 @@ def test_real_file_smoke():
     with D.Delta50(REAL) as ds:
         assert len(ds) == 50
         assert "nitromethane" in ds.molecule_names
+        # the DELTA50 nitrate-ester misnomer is corrected to the C-nitro name here
+        assert "2-methyl-2-nitropropane" in ds.molecule_names
+        assert "t-butyl nitrate" not in ds.molecule_names
         m = ds.molecule_by_name("nitromethane")
         assert np.isfinite(m["nn_magnet_zero"]).all()
+        for key in ("shielding_wp04_pcSseg2", "shielding_wb97xd_pcSseg2", "experimental_shift"):
+            assert m[key].shape == m["atomic_numbers"].shape
+        # nitromethane: WP04 at H, wB97X-D at C, and an experimental shift on every H and C
+        z = m["atomic_numbers"]
+        assert np.isfinite(m["experimental_shift"][(z == 1) | (z == 6)]).all()
         assert ds.pcm_correction(ds.index_of("nitromethane")).shape == m["atomic_numbers"].shape
+        atoms = ds.all_atoms()
+        assert atoms["atomic_numbers"].shape == atoms["experimental_shift"].shape
