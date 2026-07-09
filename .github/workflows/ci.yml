@@ -23,9 +23,9 @@ jobs:
         # Tests run against a synthetic fixture; tests requiring the large
         # Hugging Face-hosted .hdf5 files skip automatically when those files are absent.
 
-  # The job above never installs torch, so conftest.py skips the whole magnet/ package. This job
+  # The job above never installs torch, so conftest.py skips tests/ (the magnet API tests). This job
   # installs the CPU inference stack, verifies the pip-installed package imports from a clean directory
-  # (catching packaging regressions like a dropped eqV2/Jd.pt), then runs the magnet/ API tests. The
+  # (catching packaging regressions like a dropped eqV2/Jd.pt), then runs the tests/ API tests. The
   # weights-gated inference tests still skip here (checkpoints are not in the repo); everything else runs.
   model:
     runs-on: ubuntu-latest
@@ -47,4 +47,4 @@ jobs:
         # wigner.py); a source-tree run finds Jd.pt on disk and masks the packaging bug.
         run: cd "$RUNNER_TEMP" && python -c "import magnet; print('import magnet OK:', magnet.__file__)"
       - name: Run the magnet package tests
-        run: pytest magnet/ -q
+        run: pytest tests/ -q

@@ -1,11 +1,11 @@
-# The magnet/ model package needs the heavy PyTorch / PyTorch Geometric stack
+# The magnet/ package tests live in tests/ and need the heavy PyTorch / PyTorch Geometric stack
 # (see magnet/requirements.txt), which the default dataset-reader test environment does not
-# install. When torch is absent, skip collecting the magnet tests entirely so the lightweight
-# CI stays green. They run locally once the torch stack from magnet/requirements.txt is present.
+# install. When torch is absent, skip collecting tests/ entirely so the lightweight CI stays green.
+# They run locally once the torch stack from magnet/requirements.txt is present.
 #
-# This is needed (not just the importorskip guards inside test_magnet.py) because that test file
-# lives inside the magnet package, so pytest imports magnet/__init__.py during collection, which
-# imports torch before any in-test skip can run.
+# This is needed (not just the importorskip guards inside the test files) because tests/test_api.py
+# and tests/test_magnet.py import torch (and magnet, which imports torch) at module scope, before
+# any in-test skip can run.
 import os
 import sys
 
@@ -23,8 +23,8 @@ collect_ignore_glob = []
 try:
     import torch  # noqa: F401
 except ImportError:
-    collect_ignore = ["magnet"]
-    collect_ignore_glob = ["magnet/*"]
+    collect_ignore = ["magnet", "tests"]
+    collect_ignore_glob = ["magnet/*", "tests/*"]
 
 
 # The reproduce tests (test_reproduce.py) execute every notebook and take minutes; they are opt-in so
