@@ -20,7 +20,7 @@ import io
 import numpy as np
 
 # Published SI Tables S10 (proton) and S11 (carbon), verbatim (reflection-symmetrized: n_passes=10,
-# symmetrize=True). Columns: intercept, stationary, pcm. Kept byte-for-byte in sync with
+# mirror_average=True, the option this code called symmetrize when the tables were made). Columns: intercept, stationary, pcm. Kept byte-for-byte in sync with
 # data/scaling_factors/scaling_factors_symmetrized_{H,C}.csv by test_scaling_factors.py.
 _PUBLISHED_TABLE_CSV = {
     "H": """solvent,intercept,stationary,pcm

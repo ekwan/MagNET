@@ -5,10 +5,10 @@ expose the two prediction options:
 
   - `n_passes`: average over this many forward passes to remove the per-pass frame noise (the MagNET
     paper uses 20).
-  - `symmetrize`: also average over the molecule and its mirror image. Isotropic shielding is
+  - `mirror_average`: also average over the molecule and its mirror image. Isotropic shielding is
     parity-even, but the SO(3)-only network does not enforce that, so symmetrizing removes a spurious
     reflection error that grows to ~0.3 ppm on 13C for large molecules. It costs one extra evaluation.
-    The released reference shieldings are NOT symmetrized, so leave it False to reproduce them and turn
+    The released reference shieldings are NOT mirror-averaged, so leave it False to reproduce them and turn
     it on for best accuracy on large molecules.
 
 Geometries are the AIMNet2 (machine-learning-optimized) stationary geometries, in Angstrom.
@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 from magnet.model import MagNET_Lightning
-from magnet.inference import predict_shieldings
+from magnet.inference import predict_shieldings, resolve_mirror_average
 
 MODEL_CHECKPOINTS = {
     # foundation model (predicts the gas-phase shielding the rovibrational/QCD analysis builds on)
@@ -89,10 +89,11 @@ def load_model_to_device(path, device=None, checkpoints_dir=None):
 
 
 def _predict_with(key_H, key_C, atomic_numbers_list, geometries_list,
-                  n_passes=20, symmetrize=False, device=None, checkpoints_dir=None, **predict_kwargs):
+                  n_passes=20, mirror_average=False, symmetrize=None, device=None, checkpoints_dir=None, **predict_kwargs):
     """Load one model pair and run predict_shieldings over a list of molecules. Returns a list of
     per-atom shielding arrays. Extra keyword arguments are forwarded to predict_shieldings (used by
     the explicit-solvent path for the solute/solvent split)."""
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "_predict_with")
     if device is None:
         device = _default_device()
     model_H = load_model_to_device(MODEL_CHECKPOINTS[key_H], device, checkpoints_dir=checkpoints_dir)
@@ -102,37 +103,39 @@ def _predict_with(key_H, key_C, atomic_numbers_list, geometries_list,
         atomic_numbers, geometry = entry[0], entry[1]
         out.append(np.atleast_1d(predict_shieldings(
             model_H, model_C, solute_atomic_numbers=atomic_numbers, geometry=geometry,
-            device=device, n_passes=n_passes, symmetrize=symmetrize, **predict_kwargs).squeeze()))
+            device=device, n_passes=n_passes, mirror_average=mirror_average, **predict_kwargs).squeeze()))
     return out
 
 
 def compute_MagNET_foundation_shieldings(atomic_numbers_list, geometries_list,
-                                         n_passes=20, symmetrize=False, device=None, checkpoints_dir=None):
+                                         n_passes=20, mirror_average=False, symmetrize=None, device=None, checkpoints_dir=None):
     """MagNET foundation-model gas-phase shieldings (1H and 13C) for AIMNet2 geometries."""
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "compute_MagNET_foundation_shieldings")
     return _predict_with("MagNET_H", "MagNET_C", atomic_numbers_list, geometries_list,
-                         n_passes=n_passes, symmetrize=symmetrize, device=device,
+                         n_passes=n_passes, mirror_average=mirror_average, device=device,
                          checkpoints_dir=checkpoints_dir)
 
 
 def compute_MagNET_Zero_shieldings(atomic_numbers_list, geometries_list,
-                                   n_passes=20, symmetrize=False, device=None, checkpoints_dir=None):
+                                   n_passes=20, mirror_average=False, symmetrize=None, device=None, checkpoints_dir=None):
     """MagNET-Zero gas-phase shieldings (1H and 13C) for a list of AIMNet2 geometries.
 
     Args:
         atomic_numbers_list: list of (N,) integer atomic-number arrays.
         geometries_list: list of (N, 3) coordinate arrays, in Angstrom.
-        n_passes, symmetrize: prediction options (see module docstring).
+        n_passes, mirror_average: prediction options (see module docstring).
         checkpoints_dir: optional directory holding the released weights (see load_model_to_device).
 
     Returns a list of (N,) shielding arrays (1H at H atoms, 13C at C atoms).
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "compute_MagNET_Zero_shieldings")
     return _predict_with("MagNET-Zero_H", "MagNET-Zero_C", atomic_numbers_list, geometries_list,
-                         n_passes=n_passes, symmetrize=symmetrize, device=device,
+                         n_passes=n_passes, mirror_average=mirror_average, device=device,
                          checkpoints_dir=checkpoints_dir)
 
 
 def compute_MagNET_PCM_corrections(atomic_numbers_list, geometries_list,
-                                   n_passes=20, symmetrize=False, device=None, checkpoints_dir=None):
+                                   n_passes=20, mirror_average=False, symmetrize=None, device=None, checkpoints_dir=None):
     """MagNET-PCM implicit-solvent (chloroform) corrections (1H and 13C) for AIMNet2 geometries.
 
     The correction is the difference between the PCM-corrected shielding and the gas-phase shielding,
@@ -140,13 +143,14 @@ def compute_MagNET_PCM_corrections(atomic_numbers_list, geometries_list,
 
     Returns a list of (N,) correction arrays.
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "compute_MagNET_PCM_corrections")
     gas = _predict_with("MagNET-PCM-withoutPCM_H", "MagNET-PCM-withoutPCM_C",
                         atomic_numbers_list, geometries_list,
-                        n_passes=n_passes, symmetrize=symmetrize, device=device,
+                        n_passes=n_passes, mirror_average=mirror_average, device=device,
                         checkpoints_dir=checkpoints_dir)
     pcm = _predict_with("MagNET-PCM-withPCM_H", "MagNET-PCM-withPCM_C",
                         atomic_numbers_list, geometries_list,
-                        n_passes=n_passes, symmetrize=symmetrize, device=device,
+                        n_passes=n_passes, mirror_average=mirror_average, device=device,
                         checkpoints_dir=checkpoints_dir)
     return [pcm[i] - gas[i] for i in range(len(pcm))]
 
@@ -156,7 +160,7 @@ N_ATOMS_PER_SOLVENT = {"chloroform": 5, "benzene": 12, "methanol": 6, "water": 3
 
 
 def compute_MagNET_x_corrections(solvent, solute_atomic_numbers_list, atomic_numbers_list,
-                                 geometries_list, n_passes=20, symmetrize=False, device=None,
+                                 geometries_list, n_passes=20, mirror_average=False, symmetrize=None, device=None,
                                  solvent_distance_threshold=12.0, checkpoints_dir=None):
     """MagNET-x explicit-solvent corrections (solvated minus isolated) for one solvent.
 
@@ -167,7 +171,7 @@ def compute_MagNET_x_corrections(solvent, solute_atomic_numbers_list, atomic_num
             The solute atoms must come first, followed by complete solvent molecules in contiguous
             blocks of N_ATOMS_PER_SOLVENT[solvent] atoms.
         geometries_list: list of (n_total, 3) coordinate arrays (same atom order), in Angstrom.
-        n_passes, symmetrize: prediction options (see module docstring).
+        n_passes, mirror_average: prediction options (see module docstring).
         solvent_distance_threshold: drop solvent molecules whose nearest atom is beyond this many
             Angstrom of the solute (the released pipeline used 12.0). The isolated pass uses 0.0
             internally, which strips all solvent.
@@ -176,6 +180,7 @@ def compute_MagNET_x_corrections(solvent, solute_atomic_numbers_list, atomic_num
     Returns a list of (n_solute,) correction arrays. The published pipeline averages this over MD
     frames; a single-frame value is only an estimate.
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "compute_MagNET_x_corrections")
     if solvent not in N_ATOMS_PER_SOLVENT:
         raise ValueError(f"solvent must be one of {sorted(N_ATOMS_PER_SOLVENT)}; got {solvent!r}")
     n_per = N_ATOMS_PER_SOLVENT[solvent]
@@ -187,7 +192,7 @@ def compute_MagNET_x_corrections(solvent, solute_atomic_numbers_list, atomic_num
     for solute_Z, full_Z, geom in zip(solute_atomic_numbers_list, atomic_numbers_list, geometries_list):
         kw = dict(model_H=model_H, model_C=model_C, solute_atomic_numbers=solute_Z, geometry=geom,
                   atomic_numbers=full_Z, N_atoms_per_solvent=n_per, device=device,
-                  n_passes=n_passes, symmetrize=symmetrize)
+                  n_passes=n_passes, mirror_average=mirror_average)
         solvated = np.atleast_1d(predict_shieldings(solvent_distance_threshold=solvent_distance_threshold, **kw).squeeze())
         isolated = np.atleast_1d(predict_shieldings(solvent_distance_threshold=0.0, **kw).squeeze())
         out.append(solvated - isolated)

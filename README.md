@@ -130,7 +130,7 @@ The predictions are close to experiment:
 
 **Notes:**
 
-- **Passes and symmetry.** `n_passes` (default 10) averages out equivariance error over the specified number of forward passes. If `symmetrize` (default True) is set, an additional `n_passes` are also performed on the mirror image of the input geometry (for a total of `2*n_passes`).
+- **Passes and mirror averaging.** `n_passes` (default 10) averages out equivariance error over the specified number of forward passes. If `mirror_average` (default True) is set, an additional `n_passes` are also performed on the mirror image of the input geometry (for a total of `2*n_passes`). The passes are run as a single batch per head rather than one forward pass each, so raising `n_passes` costs far less than it used to; `max_batch_graphs` caps how many run at once and does not change the answer. `mirror_average` was called `symmetrize` before, and that name still works but warns: the option averages over the mirror image, not over symmetry-equivalent nuclei.
 - **Geometry.** MagNET-Zero and MagNET-PCM require [AIMNet2](https://github.com/isayevlab/AIMNet2)-optimized geometries. Do not use other geometries.
 - **Components.** Pass `return_components=True` to also get the MagNET-Zero shielding, the MagNET-PCM correction, and the scaling coefficients behind each shift, as a `dict`.
 - **Other models.** For raw shieldings and solvent corrections, see the [API documentation](#api-documentation).

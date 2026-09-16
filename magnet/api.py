@@ -13,7 +13,8 @@ Four entry points, each taking one molecule (`atomic_numbers` shaped `(N,)` and 
 **Shared options** (all four functions):
 
 - `n_passes` (default `10`): average out equivariance error over `n_passes` forward passes
-- `symmetrize` (default `True`): if True, average over `n_passes` on the input geometry and `n_passes` on the mirror image of the input geometry
+- `mirror_average` (default `True`): if True, average over `n_passes` on the input geometry and `n_passes` on the mirror image of the input geometry.
+  (Formerly `symmetrize`, which still works but warns: it averages over the mirror image, not over symmetry-equivalent nuclei.)
 - `device` (default `None`): where to run, a torch device or a string like `"cpu"` or `"cuda"`; uses GPU if available
 - `checkpoints_dir` (default `None`): directory holding the released weights, if they are not in the current directory or the repo; may be the `model_checkpoints/` folder or its parent, and takes precedence over both
 """
@@ -24,6 +25,7 @@ from collections import Counter
 import numpy as np
 
 from . import run_magnet
+from .inference import resolve_mirror_average
 from . import scaling
 
 _MODELS = {
@@ -67,7 +69,7 @@ def _as_batch(atomic_numbers, coordinates):
     return an_list, xyz_list, single
 
 
-def predict_shifts(atomic_numbers, coordinates, solvent="chloroform", n_passes=10, symmetrize=True,
+def predict_shifts(atomic_numbers, coordinates, solvent="chloroform", n_passes=10, mirror_average=True, symmetrize=None,
                    device=None, return_components=False, checkpoints_dir=None):
     """Predict the <sup>1</sup>H and <sup>13</sup>C chemical shifts of a molecule in a solvent.
 
@@ -82,7 +84,7 @@ def predict_shifts(atomic_numbers, coordinates, solvent="chloroform", n_passes=1
             `"chloroform"`, `"toluene"`, `"benzene"`, `"chlorobenzene"`, `"acetone"`,
             `"dimethylsulfoxide"`, `"acetonitrile"`, `"trifluoroethanol"`, `"methanol"`, `"water"`.
         n_passes: average out equivariance error over `n_passes` forward passes (default `10`).
-        symmetrize: if True, also average over the mirror image of the input geometry (default `True`),
+        mirror_average: if True, also average over the mirror image of the input geometry (default `True`),
             doubling the passes.
         device: where to run, a torch device or a string like `"cpu"` or `"cuda"` (default `None`);
             uses GPU if available.
@@ -104,6 +106,7 @@ def predict_shifts(atomic_numbers, coordinates, solvent="chloroform", n_passes=1
           `{"H": {"intercept": ..., "stationary": ..., "pcm": ...}, "C": {...}}`, so that
           `shift = intercept + stationary * zero_shielding + pcm * pcm_correction`.
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "predict_shifts")
     _check_passes(n_passes)
     tables = scaling.published_scaling_tables()
     key = "TIP4P" if solvent == "water" else solvent
@@ -113,10 +116,10 @@ def predict_shifts(atomic_numbers, coordinates, solvent="chloroform", n_passes=1
 
     an_list, xyz_list, single = _as_batch(atomic_numbers, coordinates)
     zero = run_magnet.compute_MagNET_Zero_shieldings(an_list, xyz_list, n_passes=n_passes,
-                                                     symmetrize=symmetrize, device=device,
+                                                     mirror_average=mirror_average, device=device,
                                                      checkpoints_dir=checkpoints_dir)
     pcm = run_magnet.compute_MagNET_PCM_corrections(an_list, xyz_list, n_passes=n_passes,
-                                                    symmetrize=symmetrize, device=device,
+                                                    mirror_average=mirror_average, device=device,
                                                     checkpoints_dir=checkpoints_dir)
     results = []
     for atoms, sigma, delta in zip(an_list, zero, pcm):
@@ -133,7 +136,7 @@ def predict_shifts(atomic_numbers, coordinates, solvent="chloroform", n_passes=1
     return results[0] if single else results
 
 
-def predict_shieldings(atomic_numbers, coordinates, model="MagNET", n_passes=10, symmetrize=True,
+def predict_shieldings(atomic_numbers, coordinates, model="MagNET", n_passes=10, mirror_average=True, symmetrize=None,
                        device=None, checkpoints_dir=None):
     """Predict gas-phase NMR shielding constants for a molecule.
 
@@ -147,7 +150,7 @@ def predict_shieldings(atomic_numbers, coordinates, model="MagNET", n_passes=10,
         model: `"MagNET"`, the general foundation model, or `"MagNET-Zero"`, which is more accurate but
             expects an AIMNet2-optimized geometry.
         n_passes: average out equivariance error over `n_passes` forward passes (default `10`).
-        symmetrize: if True, also average over the mirror image of the input geometry (default `True`),
+        mirror_average: if True, also average over the mirror image of the input geometry (default `True`),
             doubling the passes.
         device: where to run, a torch device or a string like `"cpu"` or `"cuda"` (default `None`);
             uses GPU if available.
@@ -161,6 +164,7 @@ def predict_shieldings(atomic_numbers, coordinates, model="MagNET", n_passes=10,
         other elements come back as `0.0`, not a prediction. (`predict_shifts` instead returns `NaN`
         there.) Pass a list of molecules and you get a list of arrays back.
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "predict_shieldings")
     redirect = {"MagNET-PCM": "implicit_solvent_correction", "MagNET-x": "explicit_solvent_correction"}
     if model in redirect:
         raise ValueError(f"{model!r} is a correction model; use magnet.{redirect[model]}(...), "
@@ -169,12 +173,12 @@ def predict_shieldings(atomic_numbers, coordinates, model="MagNET", n_passes=10,
         raise ValueError(f"model must be one of {list(_MODELS)}; got {model!r}")
     _check_passes(n_passes)
     an_list, xyz_list, single = _as_batch(atomic_numbers, coordinates)
-    out = _MODELS[model](an_list, xyz_list, n_passes=n_passes, symmetrize=symmetrize, device=device,
+    out = _MODELS[model](an_list, xyz_list, n_passes=n_passes, mirror_average=mirror_average, device=device,
                          checkpoints_dir=checkpoints_dir)
     return out[0] if single else out
 
 
-def implicit_solvent_correction(atomic_numbers, coordinates, n_passes=10, symmetrize=True, device=None,
+def implicit_solvent_correction(atomic_numbers, coordinates, n_passes=10, mirror_average=True, symmetrize=None, device=None,
                                 checkpoints_dir=None):
     """Predict how a solvent changes a molecule's shieldings, using a fast continuum-solvent model.
 
@@ -188,7 +192,7 @@ def implicit_solvent_correction(atomic_numbers, coordinates, n_passes=10, symmet
         atomic_numbers: element numbers, shape `(N,)`; or a list of such arrays.
         coordinates: xyz positions in Angstrom, shape `(N, 3)`; or a list of them.
         n_passes: average out equivariance error over `n_passes` forward passes (default `10`).
-        symmetrize: if True, also average over the mirror image of the input geometry (default `True`),
+        mirror_average: if True, also average over the mirror image of the input geometry (default `True`),
             doubling the passes.
         device: where to run, a torch device or a string like `"cpu"` or `"cuda"` (default `None`);
             uses GPU if available.
@@ -201,10 +205,11 @@ def implicit_solvent_correction(atomic_numbers, coordinates, n_passes=10, symmet
         atoms; atoms of other elements come back as `0.0`. Pass a list of molecules and you get a list
         of arrays back.
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "implicit_solvent_correction")
     _check_passes(n_passes)
     an_list, xyz_list, single = _as_batch(atomic_numbers, coordinates)
     out = run_magnet.compute_MagNET_PCM_corrections(an_list, xyz_list, n_passes=n_passes,
-                                                    symmetrize=symmetrize, device=device,
+                                                    mirror_average=mirror_average, device=device,
                                                     checkpoints_dir=checkpoints_dir)
     return out[0] if single else out
 
@@ -258,7 +263,7 @@ def _explicit_one(atoms, xyz, solute_atoms, solvent):
 
 
 def explicit_solvent_correction(atomic_numbers, coordinates, solute_atoms, solvent="chloroform",
-                                n_passes=10, symmetrize=True, device=None,
+                                n_passes=10, mirror_average=True, symmetrize=None, device=None,
                                 solvent_distance_threshold=12.0, checkpoints_dir=None):
     """Predict a solvent's effect on shieldings from an MD snapshot with explicit solvent molecules.
 
@@ -276,7 +281,7 @@ def explicit_solvent_correction(atomic_numbers, coordinates, solute_atoms, solve
         solvent: `"chloroform"`, `"benzene"`, `"methanol"`, or `"water"`, the four MagNET-x supports
             (default `"chloroform"`).
         n_passes: average out equivariance error over `n_passes` forward passes (default `10`).
-        symmetrize: if True, also average over the mirror image of the input geometry (default `True`),
+        mirror_average: if True, also average over the mirror image of the input geometry (default `True`),
             doubling the passes.
         device: where to run, a torch device or a string like `"cpu"` or `"cuda"` (default `None`);
             uses GPU if available.
@@ -291,6 +296,7 @@ def explicit_solvent_correction(atomic_numbers, coordinates, solute_atoms, solve
         One correction in ppm per solute atom, in the order you listed them in `solute_atoms`. Pass a
         list of snapshots and you get a list of arrays back.
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "explicit_solvent_correction")
     if solvent not in run_magnet.N_ATOMS_PER_SOLVENT:
         raise ValueError(f"solvent must be one of {sorted(run_magnet.N_ATOMS_PER_SOLVENT)}; "
                          f"got {solvent!r}")
@@ -304,6 +310,6 @@ def explicit_solvent_correction(atomic_numbers, coordinates, solute_atoms, solve
         full_xyz_list.append(full_xyz)
     out = run_magnet.compute_MagNET_x_corrections(
         solvent, solute_an_list, full_an_list, full_xyz_list,
-        n_passes=n_passes, symmetrize=symmetrize, device=device,
+        n_passes=n_passes, mirror_average=mirror_average, device=device,
         solvent_distance_threshold=solvent_distance_threshold, checkpoints_dir=checkpoints_dir)
     return out[0] if single else out

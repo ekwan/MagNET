@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import torch
 import torch_geometric
@@ -7,6 +9,36 @@ import torch_scatter
 # substituents): hydrogen, carbon, nitrogen, oxygen, fluorine, sulfur, chlorine. Predictions for any
 # other element are not meaningful, so predict_shieldings refuses them.
 SUPPORTED_ELEMENTS = frozenset({1, 6, 7, 8, 9, 16, 17})
+
+# How many graphs go through one forward pass at most. The passes of one prediction are batched
+# together, and a large solvated system at a high n_passes would otherwise have to fit in memory
+# all at once. Chunking changes nothing about the answer.
+MAX_BATCH_GRAPHS = 64
+
+
+def resolve_mirror_average(mirror_average, symmetrize, caller):
+    """Take whichever of the two names the caller used, and warn if it was the old one.
+
+    `symmetrize` was renamed to `mirror_average`: the option averages a prediction over the
+    molecule and its mirror image, where the old name read as though it averaged
+    symmetry-equivalent nuclei. The old name still works.
+
+    Args:
+        mirror_average: what the caller passed under the new name.
+        symmetrize: what the caller passed under the old name, or None if it did not.
+        caller: the function name to name in the warning.
+
+    Returns:
+        The setting to use.
+    """
+    if symmetrize is None:
+        return mirror_average
+    warnings.warn(
+        f"{caller}(symmetrize=...) is deprecated; use mirror_average=... instead. The option "
+        f"averages the prediction over the molecule and its mirror image, which 'symmetrize' "
+        f"read as though it meant averaging symmetry-equivalent nuclei.",
+        DeprecationWarning, stacklevel = 3)
+    return symmetrize
 
 
 def yield_data(solute_atomic_numbers, geometries, atomic_numbers, shieldings = None, N_atoms_per_solvent = 3, solvent_distance_threshold = None, atom_type = 'H'):
@@ -106,7 +138,60 @@ def _predict_once(model_H, model_C, solute_atomic_numbers, geometry, atomic_numb
     return y_pred_combined
 
 
-def predict_shieldings(model_H, model_C, solute_atomic_numbers, geometry, atomic_numbers = None, N_atoms_per_solvent = None, solvent_distance_threshold = None, device = 'cpu', n_passes = 1, symmetrize = False):
+def _predict_batch(model_H, model_C, solute_atomic_numbers, geometries, atomic_numbers,
+                   N_atoms_per_solvent, solvent_distance_threshold, device):
+    """Run every geometry in `geometries` through both heads, one forward pass per head.
+
+    Each geometry becomes one graph, and the graphs are concatenated into a single
+    torch_geometric Batch, so a list of geometries costs two forward passes rather than two per
+    geometry. The model recomputes `natoms` from `batch.batch`, so the per-graph `batch` and
+    `natoms` that yield_data writes are dropped before concatenating and PyG assigns its own.
+
+    Returns one (n_solute,) array per geometry, in the order given.
+    """
+    n = len(geometries)
+    combined = [None] * n
+    for atom_type in ['H', 'C']:
+        data_list = []
+        for geom in geometries:
+            data = yield_data(
+                solute_atomic_numbers = solute_atomic_numbers,
+                geometries = geom,
+                atomic_numbers = atomic_numbers,
+                shieldings = None,
+                N_atoms_per_solvent = N_atoms_per_solvent if N_atoms_per_solvent is not None else 3,
+                solvent_distance_threshold = solvent_distance_threshold,
+                atom_type = atom_type,
+            )
+            # PyG owns `batch` on a Batch, and the model rebuilds `natoms` from it; keeping the
+            # single-graph versions here would have them concatenated as ordinary attributes.
+            del data.batch, data.natoms
+            data_list.append(data)
+        batch = torch_geometric.data.Batch.from_data_list(data_list).to(device)
+
+        with torch.no_grad():
+            y_pred = (model_H if atom_type == 'H' else model_C).forward(batch).cpu()
+        # the masks live on `device`; move them to CPU to match y_pred (a no-op on CPU, and
+        # required on CUDA, where indexing a CPU tensor with a device mask would raise)
+        atom_type_mask = batch.atom_type_mask.cpu()
+        solute = batch.solute.cpu()
+        graph_of_atom = batch.batch.cpu()
+        y_pred[~atom_type_mask] = 0.
+        keep = solute == 1
+        y_solute = y_pred[keep]
+        graph_of_solute = graph_of_atom[keep]
+
+        for i in range(n):
+            y = np.squeeze(y_solute[graph_of_solute == i].numpy())
+            # combine H and C shieldings into one array, exactly as the unbatched path does
+            if atom_type == 'H':
+                combined[i] = y
+            elif atom_type == 'C':
+                combined[i][y != 0.0] = y[y != 0.0]
+    return combined
+
+
+def predict_shieldings(model_H, model_C, solute_atomic_numbers, geometry, atomic_numbers = None, N_atoms_per_solvent = None, solvent_distance_threshold = None, device = 'cpu', n_passes = 1, mirror_average = False, symmetrize = None, max_batch_graphs = MAX_BATCH_GRAPHS):
     """Predict 1H/13C shieldings for the solute atoms.
 
     A single forward pass is NOT deterministic: each edge picks a random local
@@ -114,11 +199,22 @@ def predict_shieldings(model_H, model_C, solute_atomic_numbers, geometry, atomic
     the output varies by ~0.01 ppm (13C) between passes. Set n_passes (e.g. 20, as in
     the MagNET paper) to average that frame noise away.
 
-    symmetrize=True also averages the prediction over the molecule and its mirror image.
+    mirror_average=True also averages the prediction over the molecule and its mirror image.
     Isotropic shielding is parity-even (a molecule and its reflection have identical
     shieldings), but the SO(3)-only model does not enforce this and can disagree by
-    ~0.3 ppm on 13C for large molecules; symmetrizing removes that spurious error.
+    ~0.3 ppm on 13C for large molecules; averaging over the mirror image removes that
+    spurious error.
+
+    The passes are independent of one another, so they are run as one batch per head rather than
+    one forward pass each: n_passes with mirror_average costs 2*n_passes graphs and two forward
+    passes, not 4*n_passes. `max_batch_graphs` caps how many graphs go through at once, so a large
+    solvated system at a high n_passes does not have to fit in memory all at once. The answer does
+    not depend on it.
+
+    `symmetrize` is the old name for `mirror_average` and still works, with a DeprecationWarning.
     """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "predict_shieldings")
+
     solute_atomic_numbers = np.asarray(solute_atomic_numbers)
     if atomic_numbers is None:
         atomic_numbers = solute_atomic_numbers
@@ -139,16 +235,18 @@ def predict_shieldings(model_H, model_C, solute_atomic_numbers, geometry, atomic
 
     geometry = np.asarray(geometry, dtype=float)
     geometries = [geometry]
-    if symmetrize:
+    if mirror_average:
         reflected = geometry.copy()
         reflected[..., 0] = -reflected[..., 0]   # mirror across the yz-plane (an improper rotation)
         geometries.append(reflected)
 
+    # every pass of every geometry, run together rather than one at a time
+    repeated = [geom for geom in geometries for _ in range(n_passes)]
+
     preds = []
-    for geom in geometries:
-        for _ in range(n_passes):
-            preds.append(np.squeeze(_predict_once(model_H, model_C, solute_atomic_numbers, geom,
-                                                  atomic_numbers, N_atoms_per_solvent,
-                                                  solvent_distance_threshold, device)))
+    for start in range(0, len(repeated), max_batch_graphs):
+        preds.extend(_predict_batch(model_H, model_C, solute_atomic_numbers,
+                                    repeated[start:start + max_batch_graphs], atomic_numbers,
+                                    N_atoms_per_solvent, solvent_distance_threshold, device))
     # atleast_1d keeps a one-atom solute a (1,) array instead of a 0-d scalar after the per-pass squeeze
     return np.atleast_1d(np.mean(preds, axis=0))
