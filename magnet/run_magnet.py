@@ -19,7 +19,8 @@ import numpy as np
 import torch
 
 from magnet.model import MagNET_Lightning
-from magnet.inference import predict_shieldings, resolve_mirror_average
+from magnet.inference import (predict_shieldings, predict_shieldings_batch,
+                              resolve_mirror_average)
 
 MODEL_CHECKPOINTS = {
     # foundation model (predicts the gas-phase shielding the rovibrational/QCD analysis builds on)
@@ -98,13 +99,10 @@ def _predict_with(key_H, key_C, atomic_numbers_list, geometries_list,
         device = _default_device()
     model_H = load_model_to_device(MODEL_CHECKPOINTS[key_H], device, checkpoints_dir=checkpoints_dir)
     model_C = load_model_to_device(MODEL_CHECKPOINTS[key_C], device, checkpoints_dir=checkpoints_dir)
-    out = []
-    for entry in zip(atomic_numbers_list, geometries_list):
-        atomic_numbers, geometry = entry[0], entry[1]
-        out.append(np.atleast_1d(predict_shieldings(
-            model_H, model_C, solute_atomic_numbers=atomic_numbers, geometry=geometry,
-            device=device, n_passes=n_passes, mirror_average=mirror_average, **predict_kwargs).squeeze()))
-    return out
+    # one batch across the molecules as well as their passes, rather than a call per molecule
+    return [np.atleast_1d(one.squeeze()) for one in predict_shieldings_batch(
+        model_H, model_C, list(atomic_numbers_list), list(geometries_list),
+        device=device, n_passes=n_passes, mirror_average=mirror_average, **predict_kwargs)]
 
 
 def compute_MagNET_foundation_shieldings(atomic_numbers_list, geometries_list,

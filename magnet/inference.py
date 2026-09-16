@@ -138,29 +138,35 @@ def _predict_once(model_H, model_C, solute_atomic_numbers, geometry, atomic_numb
     return y_pred_combined
 
 
-def _predict_batch(model_H, model_C, solute_atomic_numbers, geometries, atomic_numbers,
-                   N_atoms_per_solvent, solvent_distance_threshold, device):
-    """Run every geometry in `geometries` through both heads, one forward pass per head.
+def _predict_batch(model_H, model_C, graphs, device):
+    """Run every graph in `graphs` through both heads, one forward pass per head.
 
-    Each geometry becomes one graph, and the graphs are concatenated into a single
-    torch_geometric Batch, so a list of geometries costs two forward passes rather than two per
-    geometry. The model recomputes `natoms` from `batch.batch`, so the per-graph `batch` and
-    `natoms` that yield_data writes are dropped before concatenating and PyG assigns its own.
+    Each entry of `graphs` is one geometry to predict for, as
+    `(solute_atomic_numbers, geometry, atomic_numbers, N_atoms_per_solvent,
+    solvent_distance_threshold)`. They need not be the same molecule: the graphs are concatenated
+    into a single torch_geometric Batch, and the answers are split apart again by which graph each
+    atom came from, so molecules of different sizes batch together as readily as repeated passes
+    of one.
 
-    Returns one (n_solute,) array per geometry, in the order given.
+    The model recomputes `natoms` from `batch.batch`, so the per-graph `batch` and `natoms` that
+    yield_data writes are dropped before concatenating and PyG assigns its own.
+    `unique_molecule_batch` rides along unread: yield_data consumes it for solvent filtering
+    before this point, and no model looks at it, so nothing has to be offset across graphs.
+
+    Returns one (n_solute,) array per entry, in the order given.
     """
-    n = len(geometries)
+    n = len(graphs)
     combined = [None] * n
     for atom_type in ['H', 'C']:
         data_list = []
-        for geom in geometries:
+        for solute_atomic_numbers, geometry, atomic_numbers, per_solvent, threshold in graphs:
             data = yield_data(
                 solute_atomic_numbers = solute_atomic_numbers,
-                geometries = geom,
+                geometries = geometry,
                 atomic_numbers = atomic_numbers,
                 shieldings = None,
-                N_atoms_per_solvent = N_atoms_per_solvent if N_atoms_per_solvent is not None else 3,
-                solvent_distance_threshold = solvent_distance_threshold,
+                N_atoms_per_solvent = per_solvent if per_solvent is not None else 3,
+                solvent_distance_threshold = threshold,
                 atom_type = atom_type,
             )
             # PyG owns `batch` on a Batch, and the model rebuilds `natoms` from it; keeping the
@@ -191,8 +197,37 @@ def _predict_batch(model_H, model_C, solute_atomic_numbers, geometries, atomic_n
     return combined
 
 
+def _check_elements(atomic_numbers):
+    """Refuse a system holding an element MagNET was never trained on.
+
+    MagNET was only ever trained on SUPPORTED_ELEMENTS. On anything else it would emit a confident
+    but meaningless prediction, so refuse it rather than let bad numbers through (validate the full
+    system, which for MagNET-x includes the solvent atoms).
+
+    Raises:
+        ValueError: naming every atomic number that is not supported.
+    """
+    unsupported = sorted(set(np.unique(atomic_numbers).tolist()) - SUPPORTED_ELEMENTS)
+    if unsupported:
+        raise ValueError(
+            f"MagNET supports only the elements {sorted(SUPPORTED_ELEMENTS)} "
+            f"(H, C, N, O, F, S, Cl); the input contains unsupported atomic numbers {unsupported}. "
+            f"Exclude molecules with these elements before predicting.")
+
+
+def _geometries_of(geometry, mirror_average, n_passes):
+    """Say which geometries one prediction runs over, the mirror image and the passes included."""
+    geometry = np.asarray(geometry, dtype=float)
+    geometries = [geometry]
+    if mirror_average:
+        reflected = geometry.copy()
+        reflected[..., 0] = -reflected[..., 0]   # mirror across the yz-plane (an improper rotation)
+        geometries.append(reflected)
+    return [geom for geom in geometries for _ in range(n_passes)]
+
+
 def predict_shieldings(model_H, model_C, solute_atomic_numbers, geometry, atomic_numbers = None, N_atoms_per_solvent = None, solvent_distance_threshold = None, device = 'cpu', n_passes = 1, mirror_average = False, symmetrize = None, max_batch_graphs = MAX_BATCH_GRAPHS):
-    """Predict 1H/13C shieldings for the solute atoms.
+    """Predict 1H/13C shieldings for the solute atoms of one molecule.
 
     A single forward pass is NOT deterministic: each edge picks a random local
     reference frame (eqV2/edge_rot_mat.py), so with a finite spherical-harmonic grid
@@ -206,47 +241,89 @@ def predict_shieldings(model_H, model_C, solute_atomic_numbers, geometry, atomic
     spurious error.
 
     The passes are independent of one another, so they are run as one batch per head rather than
-    one forward pass each: n_passes with mirror_average costs 2*n_passes graphs and two forward
-    passes, not 4*n_passes. `max_batch_graphs` caps how many graphs go through at once, so a large
-    solvated system at a high n_passes does not have to fit in memory all at once. The answer does
-    not depend on it.
+    one forward pass each. `predict_shieldings_batch` batches whole molecules together as well,
+    and is what to call for more than one.
 
     `symmetrize` is the old name for `mirror_average` and still works, with a DeprecationWarning.
     """
     mirror_average = resolve_mirror_average(mirror_average, symmetrize, "predict_shieldings")
+    return predict_shieldings_batch(
+        model_H, model_C, [solute_atomic_numbers], [geometry],
+        atomic_numbers_list = None if atomic_numbers is None else [atomic_numbers],
+        N_atoms_per_solvent = N_atoms_per_solvent,
+        solvent_distance_threshold = solvent_distance_threshold, device = device,
+        n_passes = n_passes, mirror_average = mirror_average,
+        max_batch_graphs = max_batch_graphs)[0]
 
-    solute_atomic_numbers = np.asarray(solute_atomic_numbers)
-    if atomic_numbers is None:
-        atomic_numbers = solute_atomic_numbers
-    else:
-        # coerce so the element comparisons in yield_data (atomic_numbers == 1) stay array-wise;
-        # a bare Python list would compare to a scalar False and silently mis-mask
-        atomic_numbers = np.asarray(atomic_numbers)
 
-    # MagNET was only ever trained on these elements. On anything else it would emit a confident but
-    # meaningless prediction, so refuse it rather than let bad numbers through (validate the full
-    # system, which for MagNET-x includes the solvent atoms).
-    unsupported = sorted(set(np.unique(atomic_numbers).tolist()) - SUPPORTED_ELEMENTS)
-    if unsupported:
+def predict_shieldings_batch(model_H, model_C, solute_atomic_numbers_list, geometries_list, atomic_numbers_list = None, N_atoms_per_solvent = None, solvent_distance_threshold = None, device = 'cpu', n_passes = 1, mirror_average = False, symmetrize = None, max_batch_graphs = MAX_BATCH_GRAPHS):
+    """Predict 1H/13C shieldings for many molecules at once.
+
+    Every molecule's passes, and its mirror image where `mirror_average` is set, go through as one
+    batch rather than one forward pass each, and molecules share those batches with one another.
+    A 31-atom graph occupies very little of a GPU, so what costs the time is the number of forward
+    passes and not the size of any one of them: batching across molecules is what fills the card.
+
+    The molecules need not be the same size or the same shape. Each answer is split out by which
+    graph its atoms came from, so a list of molecules comes back as a list of per-atom arrays in
+    the order given, exactly as calling `predict_shieldings` on each would have.
+
+    Args:
+        model_H, model_C: the 1H and 13C models to run.
+        solute_atomic_numbers_list: one array of solute atomic numbers per molecule.
+        geometries_list: one (n, 3) coordinate array per molecule, in the same order.
+        atomic_numbers_list: the whole system per molecule where it differs from the solute (the
+            explicit-solvent path), or None where every system is its own solute.
+        N_atoms_per_solvent, solvent_distance_threshold: the explicit-solvent options, applied to
+            every molecule.
+        device: where to run.
+        n_passes: how many forward passes to average per geometry.
+        mirror_average: whether to average over the mirror image as well.
+        symmetrize: the old name for `mirror_average`, which still works and warns.
+        max_batch_graphs: how many graphs go through one forward pass at most. It bounds memory
+            and changes no answer.
+
+    Returns:
+        One (n_solute,) array per molecule, in the order given.
+
+    Raises:
+        ValueError: a molecule holds an element MagNET was not trained on, or the lists differ in
+            length.
+    """
+    mirror_average = resolve_mirror_average(mirror_average, symmetrize, "predict_shieldings_batch")
+
+    if len(solute_atomic_numbers_list) != len(geometries_list):
         raise ValueError(
-            f"MagNET supports only the elements {sorted(SUPPORTED_ELEMENTS)} "
-            f"(H, C, N, O, F, S, Cl); the input contains unsupported atomic numbers {unsupported}. "
-            f"Exclude molecules with these elements before predicting.")
+            f"got {len(solute_atomic_numbers_list)} solutes and {len(geometries_list)} geometries; "
+            f"they name the same molecules and must be the same length")
+    if atomic_numbers_list is not None and len(atomic_numbers_list) != len(geometries_list):
+        raise ValueError(
+            f"got {len(atomic_numbers_list)} systems and {len(geometries_list)} geometries; "
+            f"they name the same molecules and must be the same length")
 
-    geometry = np.asarray(geometry, dtype=float)
-    geometries = [geometry]
-    if mirror_average:
-        reflected = geometry.copy()
-        reflected[..., 0] = -reflected[..., 0]   # mirror across the yz-plane (an improper rotation)
-        geometries.append(reflected)
+    # every graph to run, and which molecule each one belongs to
+    graphs, molecule_of_graph = [], []
+    for i, (solute, geometry) in enumerate(zip(solute_atomic_numbers_list, geometries_list)):
+        solute = np.asarray(solute)
+        if atomic_numbers_list is None:
+            whole = solute
+        else:
+            # coerce so the element comparisons in yield_data (atomic_numbers == 1) stay array-wise;
+            # a bare Python list would compare to a scalar False and silently mis-mask
+            whole = np.asarray(atomic_numbers_list[i])
+        _check_elements(whole)
+        for geom in _geometries_of(geometry, mirror_average, n_passes):
+            graphs.append((solute, geom, whole, N_atoms_per_solvent, solvent_distance_threshold))
+            molecule_of_graph.append(i)
 
-    # every pass of every geometry, run together rather than one at a time
-    repeated = [geom for geom in geometries for _ in range(n_passes)]
+    per_graph = []
+    for start in range(0, len(graphs), max_batch_graphs):
+        per_graph.extend(_predict_batch(model_H, model_C, graphs[start:start + max_batch_graphs],
+                                        device))
 
-    preds = []
-    for start in range(0, len(repeated), max_batch_graphs):
-        preds.extend(_predict_batch(model_H, model_C, solute_atomic_numbers,
-                                    repeated[start:start + max_batch_graphs], atomic_numbers,
-                                    N_atoms_per_solvent, solvent_distance_threshold, device))
+    # average each molecule's own passes, and nothing else's
+    gathered = [[] for _ in geometries_list]
+    for prediction, molecule in zip(per_graph, molecule_of_graph):
+        gathered[molecule].append(prediction)
     # atleast_1d keeps a one-atom solute a (1,) array instead of a 0-d scalar after the per-pass squeeze
-    return np.atleast_1d(np.mean(preds, axis=0))
+    return [np.atleast_1d(np.mean(passes, axis=0)) for passes in gathered]

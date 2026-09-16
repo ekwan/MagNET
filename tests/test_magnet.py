@@ -345,3 +345,75 @@ def test_one_atom_solute_stays_one_dimensional():
                     [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]])
     out = predict_shieldings(mH, mC, solute_atomic_numbers=z, geometry=xyz, device=dev, n_passes=2)
     assert out.ndim == 1 and out.shape == (5,)
+
+
+# =====================================================================
+# batching across molecules
+# =====================================================================
+
+def test_batch_refuses_mismatched_lists():
+    """Two lists naming the same molecules have to be the same length."""
+    from magnet.inference import predict_shieldings_batch
+    z = np.array([6, 1, 1, 1, 1])
+    xyz = np.zeros((5, 3))
+    with pytest.raises(ValueError, match="same length"):
+        predict_shieldings_batch(None, None, [z, z], [xyz])
+    with pytest.raises(ValueError, match="same length"):
+        predict_shieldings_batch(None, None, [z], [xyz], atomic_numbers_list=[z, z])
+
+
+def test_batch_refuses_unsupported_element():
+    """A molecule out of vocabulary is refused before any model runs, as the single path does."""
+    from magnet.inference import predict_shieldings_batch
+    good = np.array([6, 1, 1, 1, 1])
+    bad = np.array([15, 1, 1, 1])          # phosphorus
+    with pytest.raises(ValueError, match="unsupported atomic numbers"):
+        predict_shieldings_batch(None, None, [good, bad], [np.zeros((5, 3)), np.zeros((4, 3))])
+
+
+@pytest.mark.skipif(not os.path.exists(CKPT), reason="released MagNET-Zero checkpoints not present")
+def test_batch_matches_one_at_a_time():
+    """Molecules batched together answer as they do apart, whatever their sizes.
+
+    The molecules are deliberately of two different atom counts, since what splits the answers
+    apart is which graph each atom came from and not any assumption that they match.
+    """
+    from magnet.inference import predict_shieldings_batch
+    dev = "cpu"
+    mH = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_1H.ckpt"), map_location=dev).eval()
+    mC = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_13C.ckpt"), map_location=dev).eval()
+    methane_z = np.array([6, 1, 1, 1, 1])
+    methane_xyz = np.array([[0., 0., 0.], [0.629, 0.629, 0.629], [-0.629, -0.629, 0.629],
+                            [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]])
+    ethanol_z = np.array([6, 6, 8, 1, 1, 1, 1, 1, 1])
+    ethanol_xyz = np.array([[1.17, -0.24, 0.], [0., 0.55, 0.], [-1.16, -0.25, 0.],
+                            [2.08, 0.37, 0.], [1.17, -0.87, 0.89], [1.17, -0.87, -0.89],
+                            [0.01, 1.19, 0.88], [0.01, 1.19, -0.88], [-1.90, 0.35, 0.]])
+    zs, xyzs = [methane_z, ethanol_z], [methane_xyz, ethanol_xyz]
+    kw = dict(device=dev, n_passes=30, mirror_average=True)
+    apart = [predict_shieldings(mH, mC, solute_atomic_numbers=z, geometry=x, **kw)
+             for z, x in zip(zs, xyzs)]
+    together = predict_shieldings_batch(mH, mC, zs, xyzs, **kw)
+    assert [one.shape for one in together] == [one.shape for one in apart]
+    for a, b in zip(apart, together):
+        # both average the same frame noise away, so they agree to well inside it
+        assert np.max(np.abs(a - b)) < 0.05
+
+
+@pytest.mark.skipif(not os.path.exists(CKPT), reason="released MagNET-Zero checkpoints not present")
+def test_batch_chunking_does_not_change_the_answer():
+    """max_batch_graphs splits the work and nothing else, across molecules as within one."""
+    from magnet.inference import predict_shieldings_batch
+    dev = "cpu"
+    mH = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_1H.ckpt"), map_location=dev).eval()
+    mC = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_13C.ckpt"), map_location=dev).eval()
+    z = np.array([6, 1, 1, 1, 1])
+    xyz = np.array([[0., 0., 0.], [0.629, 0.629, 0.629], [-0.629, -0.629, 0.629],
+                    [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]])
+    kw = dict(device=dev, n_passes=20, mirror_average=True)
+    whole = predict_shieldings_batch(mH, mC, [z, z, z], [xyz, xyz + 0.01, xyz - 0.01],
+                                     max_batch_graphs=1000, **kw)
+    chunked = predict_shieldings_batch(mH, mC, [z, z, z], [xyz, xyz + 0.01, xyz - 0.01],
+                                       max_batch_graphs=3, **kw)
+    for a, b in zip(whole, chunked):
+        assert np.max(np.abs(a - b)) < 0.05
