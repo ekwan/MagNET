@@ -260,3 +260,88 @@ def test_real_magnet_x_reproduces_dft_correction():
     keep = ((Zs == 1) | (Zs == 6)) & np.isfinite(ref)
     rms = np.sqrt(np.mean((correction[keep] - ref[keep]) ** 2))
     assert rms < 0.3   # measured ~0.085 ppm on this pose; model error, not exact
+
+
+# =====================================================================
+# mirror_average (formerly symmetrize), and the batching behind the passes
+# =====================================================================
+
+def test_symmetrize_is_deprecated_but_still_works():
+    """The old name keeps working and says so, since magnet-nmr is published under it."""
+    import warnings
+    from magnet.inference import resolve_mirror_average
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert resolve_mirror_average(False, True, "predict_shieldings") is True
+    assert len(caught) == 1
+    assert issubclass(caught[0].category, DeprecationWarning)
+    assert "mirror_average" in str(caught[0].message)
+
+
+def test_mirror_average_passes_without_warning():
+    """The new name is the quiet one."""
+    import warnings
+    from magnet.inference import resolve_mirror_average
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert resolve_mirror_average(True, None, "predict_shieldings") is True
+        assert resolve_mirror_average(False, None, "predict_shieldings") is False
+    assert caught == []
+
+
+def test_symmetrize_wins_when_both_are_given():
+    """A caller still passing the old name gets what it asked for, whatever the new one defaults to."""
+    import warnings
+    from magnet.inference import resolve_mirror_average
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert resolve_mirror_average(True, False, "predict_shieldings") is False
+
+
+@pytest.mark.skipif(not os.path.exists(CKPT), reason="released MagNET-Zero checkpoints not present")
+def test_mirror_average_matches_symmetrize():
+    """The rename is a rename: both names give the same numbers."""
+    import warnings
+    dev = "cpu"
+    mH = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_1H.ckpt"), map_location=dev).eval()
+    mC = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_13C.ckpt"), map_location=dev).eval()
+    z = np.array([6, 1, 1, 1, 1])
+    xyz = np.array([[0., 0., 0.], [0.629, 0.629, 0.629], [-0.629, -0.629, 0.629],
+                    [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        old = predict_shieldings(mH, mC, solute_atomic_numbers=z, geometry=xyz, device=dev,
+                                 n_passes=60, symmetrize=True)
+    new = predict_shieldings(mH, mC, solute_atomic_numbers=z, geometry=xyz, device=dev,
+                             n_passes=60, mirror_average=True)
+    # both average the same frame noise away, so they agree to well inside it
+    assert np.max(np.abs(old - new)) < 0.05
+
+
+@pytest.mark.skipif(not os.path.exists(CKPT), reason="released MagNET-Zero checkpoints not present")
+def test_chunking_does_not_change_the_answer():
+    """max_batch_graphs bounds memory and nothing else: the passes are averaged either way."""
+    dev = "cpu"
+    mH = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_1H.ckpt"), map_location=dev).eval()
+    mC = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_13C.ckpt"), map_location=dev).eval()
+    z = np.array([6, 1, 1, 1, 1])
+    xyz = np.array([[0., 0., 0.], [0.629, 0.629, 0.629], [-0.629, -0.629, 0.629],
+                    [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]])
+    kw = dict(solute_atomic_numbers=z, geometry=xyz, device=dev, n_passes=40, mirror_average=True)
+    whole = predict_shieldings(mH, mC, max_batch_graphs=1000, **kw)
+    chunked = predict_shieldings(mH, mC, max_batch_graphs=3, **kw)
+    # same passes, same average, only the number of forward calls differs
+    assert np.max(np.abs(whole - chunked)) < 0.05
+
+
+@pytest.mark.skipif(not os.path.exists(CKPT), reason="released MagNET-Zero checkpoints not present")
+def test_one_atom_solute_stays_one_dimensional():
+    """The per-graph squeeze must not turn a one-atom solute into a scalar."""
+    dev = "cpu"
+    mH = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_1H.ckpt"), map_location=dev).eval()
+    mC = MagNET_Lightning.load_from_checkpoint(os.path.join(CKPT, "MagNET-Zero_13C.ckpt"), map_location=dev).eval()
+    z = np.array([6, 1, 1, 1, 1])
+    xyz = np.array([[0., 0., 0.], [0.629, 0.629, 0.629], [-0.629, -0.629, 0.629],
+                    [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]])
+    out = predict_shieldings(mH, mC, solute_atomic_numbers=z, geometry=xyz, device=dev, n_passes=2)
+    assert out.ndim == 1 and out.shape == (5,)

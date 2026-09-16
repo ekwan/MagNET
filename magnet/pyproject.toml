@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "magnet-nmr"
-version = "0.1.0"
+version = "0.2.0"
 description = "MagNET: equivariant neural networks for NMR chemical-shift (shielding) prediction"
 readme = {text = "MagNET: equivariant neural networks for NMR chemical-shift (shielding) prediction. Models, datasets, install instructions, and usage examples are at https://github.com/ekwan/MagNET", content-type = "text/markdown"}
 requires-python = ">=3.9"
